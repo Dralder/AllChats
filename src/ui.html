@@ -1,0 +1,294 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+html, body { height: 100%; background: #202020; color: #E0E0E0; font: 13px Consolas, "Segoe UI", monospace; overflow: hidden; }
+#bar { height: 32px; display: flex; align-items: center; background: #202020; color: #8A8A8A; font-size: 12px; }
+#drag { flex: 1; height: 32px; line-height: 32px; padding-left: 12px; }
+#bar button { width: 44px; height: 32px; border: 0; border-radius: 0; background: transparent; color: #E0E0E0; font: 13px Consolas, "Segoe UI", monospace; cursor: pointer; }
+#bar button:hover { background: #2A2A2D; }
+#bar button#close:hover { background: #D04040; }
+#main { padding: 4px 14px 10px; display: flex; flex-direction: column; gap: 8px; }
+.card { background: #2A2A2D; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.label { text-align: center; color: #A78BFA; font-size: 12px; }
+.row { display: flex; gap: 6px; align-items: center; }
+input[type=text], select { height: 36px; width: 100%; background: #202020; color: #E0E0E0; border: 1px solid #575757; border-radius: 5px; padding: 0 10px; font: 13px Consolas, "Segoe UI", monospace; outline: none; user-select: text; -webkit-user-select: text; }
+input[type=text]:focus, select:focus { border-color: #7B2CBF; }
+.sel { position: relative; flex: 1; min-width: 0; }
+.sel select { appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer; text-overflow: ellipsis; }
+.sel::after { content: "\25BE"; position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; line-height: 28px; text-align: center; background: #7B2CBF; color: #fff; border-radius: 5px; pointer-events: none; }
+button.b { height: 36px; border: 0; border-radius: 5px; background: #7B2CBF; color: #fff; font: bold 13px Consolas, "Segoe UI", monospace; cursor: pointer; padding: 0 10px; }
+button.b:hover { background: #9D4EDD; }
+button.b:active { background: #5A189A; }
+button.b.danger { background: #B83232; }
+button.b.danger:hover { background: #D04040; }
+button.b.warn { background: #D4A94A; color: #202020; }
+button.b.warn:hover { filter: brightness(1.1); }
+button.b.sq { width: 36px; padding: 0; flex: none; }
+button.b.wide { flex: none; }
+button.b:disabled { background: #575757; color: #8A8A8A; cursor: default; }
+button.main { width: 100%; height: 44px; font-size: 14px; }
+#list { height: 64px; overflow-y: auto; background: #202020; border: 1px solid #575757; border-radius: 5px; padding: 2px; }
+#list::-webkit-scrollbar { width: 8px; }
+#list::-webkit-scrollbar-thumb { background: #575757; border-radius: 4px; }
+.item { height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 4px 0 6px; }
+.item span { color: #8A8A8A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item button { width: 20px; height: 20px; flex: none; border: 0; border-radius: 5px; background: #B83232; color: #fff; font: bold 12px Consolas, "Segoe UI", monospace; cursor: pointer; line-height: 20px; }
+.item button:hover { background: #D04040; }
+.empty { color: #8A8A8A; text-align: center; line-height: 56px; font-size: 12px; }
+.check { display: flex; align-items: center; gap: 10px; cursor: pointer; height: 24px; }
+.check input { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border-radius: 5px; background: #202020; border: 1px solid #575757; position: relative; cursor: pointer; flex: none; }
+.check input:checked { background: #7B2CBF; border-color: #7B2CBF; }
+.check input:checked::after { content: ""; position: absolute; left: 6px; top: 2px; width: 5px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.muted { color: #8A8A8A; }
+.val { color: #D4A94A; font-weight: bold; font-size: 14px; }
+.between { display: flex; justify-content: space-between; align-items: center; }
+input[type=range] { appearance: none; -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px; background: #575757; outline: none; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 5px; background: #7B2CBF; cursor: pointer; }
+input[type=range]::-webkit-slider-thumb:hover { background: #9D4EDD; }
+#foot { text-align: center; color: #8A8A8A; font-size: 12px; }
+#foot span { color: #A78BFA; }
+#foot .beta { color: #D4A94A; font-weight: bold; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <div id="drag">AllChats</div>
+  <button id="min">&#8211;</button>
+  <button id="close">&#10005;</button>
+</div>
+<div id="main">
+  <div class="card">
+    <div class="label">PROFILE</div>
+    <div class="row" id="profileRow">
+      <div class="sel"><select id="profile"></select></div>
+      <button class="b sq" id="add" title="New profile">+</button>
+      <button class="b sq danger" id="del" title="Delete profile">&#8211;</button>
+    </div>
+    <div class="row" id="actionRow">
+      <button class="b" id="save" style="flex:1">Save</button>
+      <button class="b" id="rename" style="flex:1">Rename</button>
+    </div>
+    <div class="row hidden" id="renameRow">
+      <input type="text" id="renameInput" spellcheck="false">
+      <button class="b wide" id="renameOk">OK</button>
+      <button class="b wide danger" id="renameCancel">Cancel</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">PAGE</div>
+    <input type="text" id="url" spellcheck="false" placeholder="https://...">
+    <button class="b" id="preview">Show Preview</button>
+  </div>
+  <div class="card">
+    <div class="label">BACKGROUNDS</div>
+    <div class="row">
+      <div class="sel"><select id="cands"></select></div>
+      <button class="b sq" id="rescan" title="Rescan page">&#8635;</button>
+    </div>
+    <div id="list"></div>
+  </div>
+  <div class="card">
+    <div class="label">OVERLAY</div>
+    <label class="check"><input type="checkbox" id="border"><span>Hide border (click-through)</span></label>
+    <label class="check"><input type="checkbox" id="autobg"><span>Auto clear page backgrounds</span></label>
+    <label class="check"><input type="checkbox" id="seven"><span>7TV emotes</span></label>
+    <label class="check"><input type="checkbox" id="conn"><span>Connection checker</span></label>
+    <div class="between"><span class="muted">Background opacity</span><span class="val" id="opVal">0%</span></div>
+    <input type="range" id="op" min="0" max="100" value="0">
+    <div class="between"><span class="muted">Zoom</span><span class="val" id="zmVal">100%</span></div>
+    <input type="range" id="zm" min="50" max="200" step="5" value="100">
+  </div>
+  <button class="b main" id="toggle">Start Overlay</button>
+  <div id="foot">Made by <span>Dralder</span> v1.0.0</div>
+</div>
+<script>
+var $ = function (id) { return document.getElementById(id); };
+var state = { overlay: false, preview: false, bgs: [], cands: [], profiles: [] };
+var delTimer = null;
+
+function send(o) { window.ipc.postMessage(JSON.stringify(o)); }
+
+function renderList() {
+  var box = $('list');
+  box.innerHTML = '';
+  if (!state.bgs.length) {
+    var e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = 'No backgrounds selected';
+    box.appendChild(e);
+    return;
+  }
+  state.bgs.forEach(function (name, i) {
+    var row = document.createElement('div');
+    row.className = 'item';
+    var s = document.createElement('span');
+    s.textContent = name;
+    s.title = name;
+    var b = document.createElement('button');
+    b.textContent = '×';
+    b.onclick = function () { send({ cmd: 'remove', index: i }); };
+    row.appendChild(s);
+    row.appendChild(b);
+    box.appendChild(row);
+  });
+}
+
+function renderCands() {
+  var sel = $('cands');
+  if (document.activeElement === sel) return;
+  sel.innerHTML = '';
+  var first = document.createElement('option');
+  first.value = '';
+  first.textContent = state.cands.length ? 'Select background (' + state.cands.length + ')' : 'No background elements found';
+  sel.appendChild(first);
+  state.cands.forEach(function (name, i) {
+    var o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = name;
+    sel.appendChild(o);
+  });
+  sel.value = '';
+}
+
+window.setState = function (s) {
+  state = s;
+  var drag = $('drag');
+  if (s.update) {
+    drag.innerHTML = 'AllChats  ';
+    var upd = document.createElement('span');
+    upd.style.cssText = 'color:#22D3EE;font-weight:bold;cursor:pointer';
+    upd.textContent = 'Update ' + s.update.tag + ' available';
+    upd.onclick = function (e) {
+      e.stopPropagation();
+      send({ cmd: 'open_update' });
+    };
+    drag.appendChild(upd);
+  } else {
+    drag.textContent = 'AllChats';
+  }
+  var sel = $('profile');
+  sel.innerHTML = '';
+  s.profiles.forEach(function (n) {
+    var o = document.createElement('option');
+    o.value = n;
+    o.textContent = n;
+    if (n === s.current) o.selected = true;
+    sel.appendChild(o);
+  });
+  if (document.activeElement !== $('url')) $('url').value = s.url;
+  $('border').checked = s.hide_border;
+  $('autobg').checked = s.auto_bg;
+  $('seven').checked = s.seven_tv;
+  $('conn').checked = s.conn_check;
+  if (document.activeElement !== $('op')) {
+    $('op').value = Math.round(s.opacity * 100);
+    $('opVal').textContent = Math.round(s.opacity * 100) + '%';
+  }
+  if (document.activeElement !== $('zm')) {
+    $('zm').value = Math.round(s.zoom * 100);
+    $('zmVal').textContent = Math.round(s.zoom * 100) + '%';
+  }
+  renderList();
+  renderCands();
+  var p = $('preview');
+  p.textContent = s.preview ? 'Hide Preview' : 'Show Preview';
+  p.className = s.preview ? 'b warn' : 'b';
+  var t = $('toggle');
+  t.textContent = s.overlay ? 'Stop Overlay' : 'Start Overlay';
+  t.className = s.overlay ? 'b main danger' : 'b main';
+  $('del').disabled = s.profiles.length < 2;
+};
+
+$('drag').addEventListener('mousedown', function (e) { if (e.button === 0) send({ cmd: 'drag' }); });
+$('min').onclick = function () { send({ cmd: 'min' }); };
+$('close').onclick = function () { send({ cmd: 'close' }); };
+$('profile').onchange = function () { send({ cmd: 'select', name: this.value }); };
+$('add').onclick = function () { send({ cmd: 'new' }); };
+$('save').onclick = function () { send({ cmd: 'save' }); };
+
+$('del').onclick = function () {
+  var b = $('del');
+  if (delTimer) {
+    clearTimeout(delTimer);
+    delTimer = null;
+    b.innerHTML = '&#8211;';
+    send({ cmd: 'delete' });
+    return;
+  }
+  b.textContent = '?';
+  delTimer = setTimeout(function () { delTimer = null; b.innerHTML = '&#8211;'; }, 2000);
+};
+
+function renameMode(on) {
+  $('profileRow').classList.toggle('hidden', on);
+  $('actionRow').classList.toggle('hidden', on);
+  $('renameRow').classList.toggle('hidden', !on);
+  if (on) {
+    $('renameInput').value = state.current || '';
+    $('renameInput').focus();
+    $('renameInput').select();
+  }
+}
+$('rename').onclick = function () { renameMode(true); };
+$('renameCancel').onclick = function () { renameMode(false); };
+$('renameOk').onclick = function () {
+  send({ cmd: 'rename', name: $('renameInput').value });
+  renameMode(false);
+};
+$('renameInput').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') $('renameOk').onclick();
+  if (e.key === 'Escape') renameMode(false);
+});
+
+function sendUrl() { send({ cmd: 'set', url: $('url').value }); }
+$('url').addEventListener('change', sendUrl);
+$('url').addEventListener('keydown', function (e) { if (e.key === 'Enter') { sendUrl(); this.blur(); } });
+
+$('preview').onclick = function () {
+  if (!state.preview) send({ cmd: 'set', url: $('url').value });
+  send({ cmd: 'preview' });
+};
+
+$('cands').addEventListener('mousedown', function () { send({ cmd: 'scan' }); });
+$('cands').onchange = function () {
+  if (this.value !== '') send({ cmd: 'add_bg', index: parseInt(this.value, 10) });
+  this.blur();
+};
+$('cands').addEventListener('blur', renderCands);
+$('rescan').onclick = function () { send({ cmd: 'scan' }); };
+
+$('border').onchange = function () { send({ cmd: 'set', hide_border: this.checked }); };
+$('autobg').onchange = function () { send({ cmd: 'set', auto_bg: this.checked }); };
+$('seven').onchange = function () { send({ cmd: 'set', seven_tv: this.checked }); };
+$('conn').onchange = function () { send({ cmd: 'set', conn_check: this.checked }); };
+
+$('op').addEventListener('input', function () {
+  $('opVal').textContent = this.value + '%';
+  send({ cmd: 'set', opacity: this.value / 100, commit: false });
+});
+$('op').addEventListener('change', function () {
+  send({ cmd: 'set', opacity: this.value / 100, commit: true });
+});
+
+$('zm').addEventListener('input', function () {
+  $('zmVal').textContent = this.value + '%';
+  send({ cmd: 'set', zoom: this.value / 100, commit: false });
+});
+$('zm').addEventListener('change', function () {
+  send({ cmd: 'set', zoom: this.value / 100, commit: true });
+});
+
+$('toggle').onclick = function () {
+  if (!state.overlay) send({ cmd: 'set', url: $('url').value });
+  send({ cmd: state.overlay ? 'stop' : 'start' });
+};
+
+document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+send({ cmd: 'init' });
+</script>
+</body>
+</html>
