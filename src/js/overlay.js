@@ -90,7 +90,6 @@
     var css = hidden.map(function (i) { return i.sel + '{display:none!important}'; }).join('\n');
     css += '\n' + U.bgCss(bgs);
     css += '\n' + U.baseCss(opacity);
-    css += '\n*::-webkit-scrollbar{display:none!important}\nhtml{scrollbar-width:none!important}';
     style.textContent = css;
     U.applyBgDirect(opacity);
   }

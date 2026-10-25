@@ -93,17 +93,17 @@ input[type=range]::-webkit-slider-thumb:hover { background: #9D4EDD; }
   </div>
   <div class="card">
     <div class="label">OVERLAY</div>
-    <label class="check"><input type="checkbox" id="border"><span>Hide border (click-through)</span></label>
-    <label class="check"><input type="checkbox" id="autobg"><span>Auto clear page backgrounds</span></label>
     <label class="check"><input type="checkbox" id="seven"><span>7TV emotes</span></label>
     <label class="check"><input type="checkbox" id="conn"><span>Connection checker</span></label>
+    <label class="check"><input type="checkbox" id="border"><span>Hide border (click-through)</span></label>
+    <label class="check"><input type="checkbox" id="autobg"><span>Auto clear backgrounds and scrollbars</span></label>
     <div class="between"><span class="muted">Background opacity</span><span class="val" id="opVal">0%</span></div>
     <input type="range" id="op" min="0" max="100" value="0">
     <div class="between"><span class="muted">Zoom</span><span class="val" id="zmVal">100%</span></div>
     <input type="range" id="zm" min="50" max="200" step="5" value="100">
   </div>
   <button class="b main" id="toggle">Start Overlay</button>
-  <div id="foot">Made by <span>Dralder</span> v1.0.0</div>
+  <div id="foot">Made by <span>Dralder</span> v1.0.1</div>
 </div>
 <script>
 var $ = function (id) { return document.getElementById(id); };

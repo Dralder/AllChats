@@ -6,6 +6,41 @@
   var observer = null;
   var styled = false;
   var css = 'img.ac7{height:1.6em;width:auto;vertical-align:middle;display:inline-block;margin:0 1px}';
+  var CHAT_SELECTORS = [
+    ".leading-\\[1\\.55\\].font-normal",
+    ".chat-line-message-body",
+    ".style-scope.yt-live-chat-text-message-renderer",
+    ".chat-scrollable-area__message-container",
+    ".chat-line__message",
+    ".link-fragment",
+    "#seventv-message-container",
+    ".seventv-chat-list",
+    ".seventv-message",
+    ".seventv-chat-message-body",
+    ".seventv-painted-content",
+    ".seventv-chat-badge",
+    ".seventv-overlay",
+    "#chatroom",
+    "#chatroom-messages",
+    ".chatroom-banner",
+    ".chat-entry-content",
+    ".chat-entry-username",
+    ".chat-emote-container",
+    ".break-all",
+    "seventv-container",
+    ".seventv-container",
+    "#message-input",
+    ".seventv-emote-menu-providers",
+    ".seventv-emote-menu-provider-icon",
+    ".seventv-emote-menu-search",
+    ".seventv-emote-menu-search-input",
+    ".seventv-emote-set-container",
+    ".seventv-set-header",
+    ".seventv-set-header-icon",
+    ".seventv-tooltip-compact",
+    ".seventv-transparent"
+  ];
+  var CHAT_SEL = '';
 
   function ready(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -22,12 +57,13 @@
     var t = p.tagName;
     if (t === 'SCRIPT' || t === 'STYLE' || t === 'TEXTAREA' || t === 'INPUT' || t === 'NOSCRIPT') return true;
     if (p.isContentEditable) return true;
+    if (CHAT_SEL && !p.closest(CHAT_SEL)) return true;
     return false;
   }
 
   function convert(node) {
     var txt = node.nodeValue;
-    if (!txt || txt.length < 2 || !node.parentNode) return;
+    if (!txt || txt === '' || !node.parentNode) return;
     var parts = txt.split(/(\s+)/);
     var hit = false;
     for (var i = 0; i < parts.length; i++) {
@@ -64,6 +100,7 @@
       return;
     }
     if (root.nodeType !== 1) return;
+    if (CHAT_SEL && !root.closest(CHAT_SEL) && !root.querySelector(CHAT_SEL)) return;
     var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
     var list = [];
     while (w.nextNode()) list.push(w.currentNode);
@@ -139,6 +176,17 @@
 
   function start() {
     ready(function () {
+      if (!CHAT_SEL) {
+        var valid = [];
+        var frag = document.createDocumentFragment();
+        CHAT_SELECTORS.forEach(function (sel) {
+          try {
+            frag.querySelector(sel);
+            valid.push(sel);
+          } catch (e) {}
+        });
+        CHAT_SEL = valid.join(',');
+      }
       if (!styled && document.documentElement) {
         var st = document.createElement('style');
         st.textContent = css;
