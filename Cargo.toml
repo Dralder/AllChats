@@ -1,6 +1,6 @@
 [package]
 name = "allchats"
-version = "1.0.0"
+version = "1.0.2"
 edition = "2021"
 build = "build.rs"
 
@@ -13,6 +13,7 @@ dirs = "5"
 ureq = "2"
 image = { version = "0.25", default-features = false, features = ["ico", "png"] }
 open = "5"
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Graphics_Dwm", "Win32_System_Threading"] }

@@ -6,6 +6,9 @@ mod store;
 mod update;
 
 use std::time::{Duration, Instant};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use serde_json::{json, Value};
 use tao::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
@@ -33,7 +36,10 @@ enum UserEvent {
     PreviewLoaded,
     OverlayLoaded,
     Emotes(String, String),
-    Update(String, String),
+    Update(update::Info),
+    UpdateProgress(u64, u64),
+    UpdateReady(PathBuf),
+    UpdateFailed(String),
 }
 
 struct Win {
@@ -156,7 +162,9 @@ struct App {
     overlay: Option<Win>,
     last_geo: Instant,
     prof_ctx: WebContext,
-    update: Option<(String, String)>,
+    update: Option<update::Info>,
+    upd_busy: bool,
+    upd_cancel: Arc<AtomicBool>,
 }
 
 impl App {
@@ -175,6 +183,11 @@ impl App {
             .unwrap_or(0);
         let ids: Vec<String> = profiles.iter().map(|p| p.id.clone()).collect();
         store.cleanup(&ids);
+
+        let upd_dir = store.root.join("update");
+        let _ = std::fs::remove_file(upd_dir.join("AllChats-update.zip"));
+        let _ = std::fs::remove_file(upd_dir.join("AllChats-update.zip.part"));
+        let _ = std::fs::remove_dir_all(upd_dir.join("extract"));
 
         let prof_ctx = make_ctx(&store, &profiles[cur].id);
 
@@ -210,6 +223,8 @@ impl App {
             last_geo: Instant::now(),
             prof_ctx,
             update: None,
+            upd_busy: false,
+            upd_cancel: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -245,8 +260,13 @@ impl App {
     fn state(&self) -> String {
         let p = self.profile();
         let bgs: Vec<&Item> = p.backgrounds.iter().collect();
-        let update_val = self.update.as_ref().map(|(tag, url)| {
-            json!({"tag": tag, "url": url})
+        let update_val = self.update.as_ref().map(|info| {
+            json!({
+                "tag": info.tag,
+                "url": info.url,
+                "asset": info.asset.is_some(),
+                "size": info.asset.as_ref().map(|a| a.size).unwrap_or(0)
+            })
         });
         json!({
             "profiles": self.profiles.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
@@ -620,11 +640,51 @@ impl App {
             "start" => self.open_overlay(t),
             "stop" => self.close_overlay(),
             "open_update" => {
-                if let Some((_, url)) = &self.update {
-                    if url.starts_with("https://github.com/Dralder/AllChats/") {
-                        let _ = open::that(url);
+                if let Some(info) = &self.update {
+                    if info.url.starts_with("https://github.com/Dralder/AllChats/") {
+                        let _ = open::that(&info.url);
                     }
                 }
+            }
+            "update_now" => {
+                if let Some(info) = &self.update {
+                    if let Some(asset) = &info.asset {
+                        if !self.upd_busy {
+                            self.upd_busy = true;
+                            self.upd_cancel.store(false, Ordering::Relaxed);
+                            let upd_dir = self.store.root.join("update");
+                            let _ = std::fs::create_dir_all(&upd_dir);
+                            let url = asset.url.clone();
+                            let size = asset.size;
+                            let sha256 = asset.sha256.clone();
+                            let cancel = Arc::clone(&self.upd_cancel);
+                            let proxy = self.proxy.clone();
+                            std::thread::spawn(move || {
+                                let result = update::download(
+                                    &url,
+                                    &upd_dir,
+                                    size,
+                                    sha256.as_deref(),
+                                    &cancel,
+                                    |done, total| {
+                                        let _ = proxy.send_event(UserEvent::UpdateProgress(done, total));
+                                    },
+                                );
+                                match result {
+                                    Ok(path) => {
+                                        let _ = proxy.send_event(UserEvent::UpdateReady(path));
+                                    }
+                                    Err(e) => {
+                                        let _ = proxy.send_event(UserEvent::UpdateFailed(e));
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+            "cancel_update" => {
+                self.upd_cancel.store(true, Ordering::Relaxed);
             }
             _ => {}
         }
@@ -802,8 +862,8 @@ fn main() {
     app.start_if_url(&event_loop);
 
     std::thread::spawn(move || {
-        if let Some((tag, url)) = update::check(env!("CARGO_PKG_VERSION")) {
-            let _ = proxy.send_event(UserEvent::Update(tag, url));
+        if let Some(info) = update::check(env!("CARGO_PKG_VERSION")) {
+            let _ = proxy.send_event(UserEvent::Update(info));
         }
     });
 
@@ -831,9 +891,131 @@ fn main() {
                 app.emotes = Some((key, json));
                 false
             }
-            Event::UserEvent(UserEvent::Update(tag, url)) => {
-                app.update = Some((tag, url));
+            Event::UserEvent(UserEvent::Update(info)) => {
+                app.update = Some(info);
                 app.push();
+                false
+            }
+            Event::UserEvent(UserEvent::UpdateProgress(done, total)) => {
+                let js = format!(
+                    "window.setProgress({{\"state\":\"downloading\",\"done\":{},\"total\":{}}})",
+                    done, total
+                );
+                let _ = app.ctl.view.evaluate_script(&js);
+                false
+            }
+            Event::UserEvent(UserEvent::UpdateReady(zip_path)) => {
+                #[cfg(debug_assertions)]
+                {
+                    let _ = std::fs::remove_file(&zip_path);
+                    app.upd_busy = false;
+                    let _ = app.ctl.view.evaluate_script("window.setProgress({\"state\":\"debug_done\"})");
+                    false
+                }
+                #[cfg(all(not(debug_assertions), windows))]
+                {
+                    app.persist();
+                    app.close_overlay();
+                    let script_path = app.store.root.join("update").join("apply.cmd");
+                    let app_path = std::env::current_exe().unwrap_or_default();
+                    let app_name = app_path.file_name().and_then(|n| n.to_str()).unwrap_or("AllChats.exe");
+                    let extract_dir = app.store.root.join("update").join("extract");
+                    let log_path = app.store.root.join("update").join("update.log");
+                    
+                    let escape = |s: &str| s.replace('%', "%%");
+                    let script = format!(
+r#"@echo off
+setlocal DisableDelayedExpansion
+set "APP={}"
+set "NAME={}"
+set "ZIP={}"
+set "DIR={}"
+set "LOG={}"
+set "NEW="
+if exist "%DIR%" rmdir /s /q "%DIR%" >nul 2>&1
+mkdir "%DIR%" >nul 2>&1
+tar -xf "%ZIP%" -C "%DIR%" >nul 2>&1
+if errorlevel 1 powershell -NoProfile -NonInteractive -Command "Expand-Archive -LiteralPath '%ZIP%' -DestinationPath '%DIR%' -Force" >nul 2>&1
+for /r "%DIR%" %%F in (*.exe) do if not defined NEW set "NEW=%%F"
+if not defined NEW goto fail
+move /y "%NEW%" "%DIR%\%NAME%" >nul 2>&1
+set "NEW=%DIR%\%NAME%"
+if not exist "%NEW%" goto fail
+set /a TRIES=0
+:del
+set /a TRIES+=1
+if exist "%APP%" del /f /q "%APP%" >nul 2>&1
+if not exist "%APP%" goto put
+if %TRIES% GEQ 60 goto fail
+powershell -NoProfile -NonInteractive -Command "Start-Sleep -Milliseconds 700" >nul 2>&1
+goto del
+:put
+move /y "%NEW%" "%APP%" >nul 2>&1
+if not exist "%APP%" goto fail
+del /f /q "%ZIP%" >nul 2>&1
+rmdir /s /q "%DIR%" >nul 2>&1
+for %%I in ("%APP%") do cd /d "%%~dpI"
+start "" "%APP%"
+(goto) 2>nul & del /f /q "%~f0"
+:fail
+echo update failed %date% %time% >> "%LOG%"
+rmdir /s /q "%DIR%" >nul 2>&1
+if exist "%APP%" for %%I in ("%APP%") do cd /d "%%~dpI"
+if exist "%APP%" start "" "%APP%"
+(goto) 2>nul & del /f /q "%~f0"
+"#,
+                        escape(&app_path.display().to_string()),
+                        escape(app_name),
+                        escape(&zip_path.display().to_string()),
+                        escape(&extract_dir.display().to_string()),
+                        escape(&log_path.display().to_string())
+                    );
+                    
+                    if let Err(_) = std::fs::write(&script_path, script) {
+                        app.upd_busy = false;
+                        let _ = app.ctl.view.evaluate_script("window.setProgress({\"state\":\"error\",\"msg\":\"Cannot write script\"})");
+                        false
+                    } else {
+                        let _ = app.ctl.view.evaluate_script("window.setProgress({\"state\":\"installing\"})");
+                        
+                        use std::os::windows::process::CommandExt;
+                        use std::process::{Command, Stdio};
+                        
+                        let result = Command::new("cmd.exe")
+                            .creation_flags(0x08000000 | 0x00000200)
+                            .raw_arg(format!("/D /C \"\"{}\"\"", script_path.display()))
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::null())
+                            .stderr(Stdio::null())
+                            .spawn();
+                        
+                        match result {
+                            Ok(_) => true,
+                            Err(_) => {
+                                app.upd_busy = false;
+                                let _ = app.ctl.view.evaluate_script("window.setProgress({\"state\":\"error\",\"msg\":\"Cannot start installer\"})");
+                                false
+                            }
+                        }
+                    }
+                }
+                #[cfg(all(not(debug_assertions), not(windows)))]
+                {
+                    app.upd_busy = false;
+                    let _ = app.ctl.view.evaluate_script("window.setProgress({\"state\":\"error\",\"msg\":\"Auto update is Windows only\"})");
+                    false
+                }
+            }
+            Event::UserEvent(UserEvent::UpdateFailed(msg)) => {
+                app.upd_busy = false;
+                if msg == "Cancelled" {
+                    let upd_dir = app.store.root.join("update");
+                    let _ = std::fs::remove_file(upd_dir.join("AllChats-update.zip.part"));
+                    let _ = app.ctl.view.evaluate_script("window.setProgress({\"state\":\"ask\"})");
+                } else {
+                    let js = format!("window.setProgress({{\"state\":\"error\",\"msg\":{}}})", serde_json::to_string(&msg).unwrap_or_else(|_| "\"Error\"".to_string()));
+                    let _ = app.ctl.view.evaluate_script(&js);
+                }
                 false
             }
             Event::WindowEvent {
