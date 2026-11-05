@@ -3,6 +3,7 @@
 mod scripts;
 mod seven;
 mod store;
+mod topmost;
 mod update;
 
 use std::time::{Duration, Instant};
@@ -38,6 +39,7 @@ enum UserEvent {
     Emotes(String, String),
     Update(update::Info),
     UpdateProgress(u64, u64),
+    Raise(bool),
     UpdateReady(PathBuf),
     UpdateFailed(String),
 }
@@ -354,9 +356,18 @@ impl App {
     }
 
     fn close_overlay(&mut self) {
+        topmost::set_active(false);
         if self.overlay.is_some() {
             self.persist();
             self.overlay = None;
+        }
+    }
+
+    fn raise_overlay(&self, from_fg: bool) {
+        #[cfg(windows)]
+        if let Some(o) = &self.overlay {
+            use tao::platform::windows::WindowExtWindows;
+            topmost::apply(o.window.hwnd() as isize, from_fg);
         }
     }
 
@@ -394,6 +405,12 @@ impl App {
             .build(t)
             .expect("window");
         apply_window_attrs(&window);
+        #[cfg(windows)]
+        {
+            use tao::platform::windows::WindowExtWindows;
+            let _ = window.set_skip_taskbar(true);
+            topmost::apply(window.hwnd() as isize, false);
+        }
         if p.hide_border {
             let _ = window.set_ignore_cursor_events(true);
         }
@@ -414,6 +431,10 @@ impl App {
                 }
             });
         let view = build_view(tune(builder), &window);
+        #[cfg(windows)]
+        {
+            topmost::set_active(true);
+        }
         self.overlay = Some(Win { view, window });
     }
 
@@ -517,6 +538,11 @@ impl App {
             if let Some(o) = &self.overlay {
                 let _ = o.window.set_ignore_cursor_events(b);
                 o.window.set_always_on_top(true);
+                #[cfg(windows)]
+                {
+                    use tao::platform::windows::WindowExtWindows;
+                    topmost::apply(o.window.hwnd() as isize, false);
+                }
                 let _ = o.view.evaluate_script(&format!("window.__acEdit&&window.__acEdit({})", !b));
             }
         }
@@ -858,6 +884,7 @@ fn main() {
     lower_priority();
     let event_loop: EventLoop<UserEvent> = EventLoopBuilder::with_user_event().build();
     let proxy = event_loop.create_proxy();
+    topmost::init(proxy.clone());
     let mut app = App::new(&event_loop, proxy.clone());
     app.start_if_url(&event_loop);
 
@@ -1016,6 +1043,10 @@ if exist "%APP%" start "" "%APP%"
                     let js = format!("window.setProgress({{\"state\":\"error\",\"msg\":{}}})", serde_json::to_string(&msg).unwrap_or_else(|_| "\"Error\"".to_string()));
                     let _ = app.ctl.view.evaluate_script(&js);
                 }
+                false
+            }
+            Event::UserEvent(UserEvent::Raise(from_fg)) => {
+                app.raise_overlay(from_fg);
                 false
             }
             Event::WindowEvent {
