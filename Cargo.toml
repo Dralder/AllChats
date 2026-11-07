@@ -1,10 +1,11 @@
 [package]
 name = "allchats"
-version = "1.0.3"
+version = "1.1.0"
 edition = "2021"
 build = "build.rs"
 
 [dependencies]
+base64 = "0.22"
 tao = "0.31"
 wry = "0.50"
 serde = { version = "1", features = ["derive"] }

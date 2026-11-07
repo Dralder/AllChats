@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html dir="{{dir}}">
+<head>
+<meta charset="UTF-8">
+<style>
+/*__FONTS__*/
+body{margin:0;padding:10px;background:#1E1E1E;color:#E0E0E0;font:12px {{font}};overflow:hidden;user-select:none;-webkit-user-select:none}
+.title{font-weight:600;margin-bottom:8px}
+.row{display:flex;flex-wrap:wrap;align-items:center;margin-bottom:4px}
+.key{display:inline-block;padding:2px 6px;margin-inline-end:8px;background:#2A2A2D;border:1px solid #575757;border-radius:3px;font-size:16px;text-align:center;white-space:nowrap}
+.footer{margin-top:8px;font-size:12px;color:#888}
+</style>
+</head>
+<body>
+<div class="title">{{help.title}}</div>
+<div class="row"><span class="key">{{help.hover.k}}</span><span>{{help.hover}}</span></div>
+<div class="row"><span class="key">{{help.left.k}}</span><span>{{help.left}}</span></div>
+<div class="row"><span class="key">{{help.leftred.k}}</span><span>{{help.leftred}}</span></div>
+<div class="row"><span class="key">{{help.right.k}}</span><span>{{help.right}}</span></div>
+<div class="row"><span class="key">{{help.rightyel.k}}</span><span>{{help.rightyel}}</span></div>
+<div class="row"><span class="key">{{help.shift.k}}</span><span>{{help.shift}}</span></div>
+<div class="footer">{{help.footer}}</div>
+</body>
+</html>

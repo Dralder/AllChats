@@ -1,5 +1,6 @@
 #![cfg_attr(all(not(debug_assertions), windows), windows_subsystem = "windows")]
 
+mod lang;
 mod scripts;
 mod seven;
 mod store;
@@ -161,12 +162,14 @@ struct App {
     proxy: EventLoopProxy<UserEvent>,
     ctl: Win,
     preview: Option<Win>,
+    help: Option<Win>,
     overlay: Option<Win>,
     last_geo: Instant,
     prof_ctx: WebContext,
     update: Option<update::Info>,
     upd_busy: bool,
     upd_cancel: Arc<AtomicBool>,
+    lang: String,
 }
 
 impl App {
@@ -197,19 +200,22 @@ impl App {
             .with_title("AllChats")
             .with_decorations(false)
             .with_resizable(false)
-            .with_inner_size(LogicalSize::new(400.0, 750.0))
+            .with_inner_size(LogicalSize::new(780.0, 475.0))
             .build(target)
             .expect("window");
 
         let p = proxy.clone();
         let mut ctl_ctx = WebContext::new(Some(store.ui_dir()));
+        let html = UI_HTML.replace("/*__FONTS__*/", &lang::font_css(None));
         let builder = WebViewBuilder::with_web_context(&mut ctl_ctx)
-            .with_html(UI_HTML)
+            .with_html(&html)
             .with_background_color((32, 32, 32, 255))
             .with_ipc_handler(move |req: Request<String>| {
                 let _ = p.send_event(UserEvent::Ui(req.into_body()));
             });
         let view = build_view(builder, &window);
+
+        let lang = if lang::valid(&settings.lang) { settings.lang } else { String::new() };
 
         Self {
             store,
@@ -221,12 +227,14 @@ impl App {
             proxy,
             ctl: Win { view, window },
             preview: None,
+            help: None,
             overlay: None,
             last_geo: Instant::now(),
             prof_ctx,
             update: None,
             upd_busy: false,
             upd_cancel: Arc::new(AtomicBool::new(false)),
+            lang,
         }
     }
 
@@ -246,9 +254,16 @@ impl App {
 
     fn persist(&self) {
         self.store.save_profile(self.profile());
-        self.store.save_settings(&Settings {
+        self.save_settings();
+    }
+
+    fn save_settings(&self) -> Settings {
+        let s = Settings {
             last_profile: self.profile().name.clone(),
-        });
+            lang: self.lang.clone(),
+        };
+        self.store.save_settings(&s);
+        s
     }
 
     fn cand_view(&self) -> Vec<&Item> {
@@ -280,11 +295,14 @@ impl App {
             "seven_tv": p.seven_tv,
             "zoom": p.zoom,
             "conn_check": p.conn_check,
+            "fade": names(&p.fade.iter().collect::<Vec<_>>()),
+            "fade_secs": p.fade_secs,
             "bgs": names(&bgs),
             "cands": names(&self.cand_view()),
             "overlay": self.overlay.is_some(),
             "preview": self.preview.is_some(),
             "update": update_val,
+            "lang": &self.lang,
         })
         .to_string()
     }
@@ -298,7 +316,7 @@ impl App {
 
     fn apply_js(&self) -> String {
         let p = self.profile();
-        scripts::apply(&p.hidden, &p.backgrounds, p.opacity, p.auto_bg, p.seven_tv, p.hide_border)
+        scripts::apply(&p.hidden, &p.backgrounds, &p.fade, p.fade_secs, p.opacity, p.auto_bg, p.seven_tv, p.hide_border)
     }
 
     fn apply_overlay(&self) {
@@ -355,6 +373,28 @@ impl App {
         }
     }
 
+    fn send_lang(&self) {
+        if self.lang.is_empty() {
+            return;
+        }
+        let map = lang::load(&self.store.root, &self.lang);
+        let dict = serde_json::Value::Object(map.into_iter().collect());
+        let code_json = serde_json::to_string(&self.lang).unwrap_or_default();
+        let dict_json = serde_json::to_string(&dict).unwrap_or_default();
+        let js = format!("window.setLang({},{})", code_json, dict_json);
+        let _ = self.ctl.view.evaluate_script(&js);
+    }
+
+    fn overlay_texts(&self) -> [String; 3] {
+        let code = if self.lang.is_empty() { "en" } else { &self.lang };
+        let map = lang::load(&self.store.root, code);
+        [
+            lang::text(&map, "ov.conn.ok"),
+            lang::text(&map, "ov.conn.lost"),
+            lang::text(&map, "ov.label"),
+        ]
+    }
+
     fn close_overlay(&mut self) {
         topmost::set_active(false);
         if self.overlay.is_some() {
@@ -377,6 +417,7 @@ impl App {
         }
         let p = self.profile().clone();
         let url = norm(&p.url);
+        let texts = self.overlay_texts();
         #[cfg(windows)]
         let window = {
             use tao::platform::windows::WindowBuilderExtWindows;
@@ -414,7 +455,7 @@ impl App {
         if p.hide_border {
             let _ = window.set_ignore_cursor_events(true);
         }
-        let script = scripts::overlay(&p.hidden, &p.backgrounds, p.opacity, p.auto_bg, p.seven_tv, p.hide_border);
+        let script = scripts::overlay(&p.hidden, &p.backgrounds, &p.fade, p.fade_secs, p.opacity, p.auto_bg, p.seven_tv, p.hide_border, &texts);
         let p1 = self.proxy.clone();
         let p2 = self.proxy.clone();
         let builder = WebViewBuilder::with_web_context(&mut self.prof_ctx)
@@ -445,7 +486,7 @@ impl App {
         }
         let p = self.profile().clone();
         let url = norm(&p.url);
-        let script = scripts::preview(&p.hidden, &p.backgrounds, p.opacity, p.auto_bg, p.seven_tv);
+        let script = scripts::preview(&p.hidden, &p.backgrounds, &p.fade, p.fade_secs, p.opacity, p.auto_bg, p.seven_tv);
         let window = base_window()
             .with_title("AllChats Preview")
             .with_decorations(true)
@@ -469,19 +510,75 @@ impl App {
             });
         let view = build_view(tune(builder), &window);
         self.preview = Some(Win { view, window });
+        self.open_help(t);
+    }
+
+    fn open_help(&mut self, t: &Target) {
+        #[cfg(windows)]
+        {
+            use tao::platform::windows::{WindowExtWindows, WindowBuilderExtWindows};
+            if let Some(p) = &self.preview {
+                let code = if self.lang.is_empty() { "en" } else { &self.lang };
+                let map = lang::load(&self.store.root, code);
+                let dir = if code == "fa" { "rtl" } else { "ltr" };
+                let font = lang::font_stack(code);
+                
+                fn escape_html(s: &str) -> String {
+                    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+                }
+                
+                let mut html = include_str!("help.html").to_string();
+                html = html.replace("/*__FONTS__*/", &lang::font_css(Some(code)));
+                html = html.replace("{{dir}}", dir);
+                html = html.replace("{{font}}", font);
+                for (k, v) in &map {
+                    if k.starts_with("help.") {
+                        if let Some(text) = v.as_str() {
+                            html = html.replace(&format!("{{{{{}}}}}", k), &escape_html(text));
+                        }
+                    }
+                }
+                
+                let hwnd = p.window.hwnd();
+                let help_window = base_window()
+                    .with_title("AllChats Help")
+                    .with_decorations(false)
+                    .with_resizable(false)
+                    .with_focused(false)
+                    .with_inner_size(LogicalSize::new(340.0, 240.0))
+                    .with_owner_window(hwnd)
+                    .with_skip_taskbar(true)
+                    .build(t)
+                    .expect("help window");
+                let help_view = WebViewBuilder::new()
+                    .with_html(&html)
+                    .build(&help_window)
+                    .expect("help webview");
+                self.help = Some(Win { view: help_view, window: help_window });
+                self.place_help();
+            }
+        }
+    }
+
+    fn place_help(&self) {
+        #[cfg(windows)]
+        if let (Some(p), Some(h)) = (&self.preview, &self.help) {
+            let pos = p.window.outer_position().unwrap_or_default();
+            let size = p.window.outer_size();
+            let _ = h.window.set_outer_position(PhysicalPosition::new(pos.x + size.width as i32, pos.y));
+        }
     }
 
     fn switch(&mut self, idx: usize, t: &Target) {
         let running = self.overlay.is_some();
         self.close_overlay();
         self.preview = None;
+        self.help = None;
         self.persist();
         self.cur = idx;
         self.cands.clear();
         self.prof_ctx = make_ctx(&self.store, &self.profiles[idx].id);
-        self.store.save_settings(&Settings {
-            last_profile: self.profile().name.clone(),
-        });
+        self.save_settings();
         if running {
             self.open_overlay(t);
         }
@@ -520,6 +617,10 @@ impl App {
         if let Some(z) = v["zoom"].as_f64() {
             self.profile_mut().zoom = z.clamp(0.5, 2.0);
             self.apply_zoom();
+        }
+        if let Some(f) = v["fade_secs"].as_u64() {
+            self.profile_mut().fade_secs = f.min(600) as u32;
+            self.apply_all();
         }
         if let Some(c) = v["conn_check"].as_bool() {
             self.profile_mut().conn_check = c;
@@ -589,8 +690,75 @@ impl App {
                 }
             }
             "new" => {
-                let name = self.unique_name();
-                let p = Profile::named(&name);
+                let name = if let Some(n) = v["name"].as_str() {
+                    let n = n.trim();
+                    if !n.is_empty() {
+                        n.chars().take(40).collect()
+                    } else {
+                        self.unique_name()
+                    }
+                } else {
+                    self.unique_name()
+                };
+                let mut p = Profile::named(&name);
+                if self.profiles.iter().any(|x| x.name.eq_ignore_ascii_case(&name)) {
+                    let mut suffix = 2;
+                    loop {
+                        let candidate = format!("{} {}", name, suffix);
+                        if !self.profiles.iter().any(|x| x.name.eq_ignore_ascii_case(&candidate)) {
+                            p.name = candidate;
+                            break;
+                        }
+                        suffix += 1;
+                    }
+                }
+                self.store.save_profile(&p);
+                self.profiles.push(p);
+                let i = self.profiles.len() - 1;
+                self.switch(i, t);
+            }
+            "add" => {
+                let name = if let Some(n) = v["name"].as_str() {
+                    let n = n.trim();
+                    if !n.is_empty() {
+                        n.chars().take(40).collect()
+                    } else {
+                        self.unique_name()
+                    }
+                } else {
+                    self.unique_name()
+                };
+                let mut p = Profile::named(&name);
+                if self.profiles.iter().any(|x| x.name.eq_ignore_ascii_case(&name)) {
+                    let mut suffix = 2;
+                    loop {
+                        let candidate = format!("{} {}", name, suffix);
+                        if !self.profiles.iter().any(|x| x.name.eq_ignore_ascii_case(&candidate)) {
+                            p.name = candidate;
+                            break;
+                        }
+                        suffix += 1;
+                    }
+                }
+                self.store.save_profile(&p);
+                self.profiles.push(p);
+                let i = self.profiles.len() - 1;
+                self.switch(i, t);
+            }
+            "dup" => {
+                let mut p = self.profile().clone();
+                p.id = store::new_id();
+                let base: String = match v["name"].as_str().map(|n| n.trim()) {
+                    Some(n) if !n.is_empty() => n.chars().take(40).collect(),
+                    _ => format!("{} (copy)", p.name),
+                };
+                let mut name = base.clone();
+                let mut suffix = 2;
+                while self.profiles.iter().any(|x| x.name.eq_ignore_ascii_case(&name)) {
+                    name = format!("{} {}", base, suffix);
+                    suffix += 1;
+                }
+                p.name = name;
                 self.store.save_profile(&p);
                 self.profiles.push(p);
                 let i = self.profiles.len() - 1;
@@ -601,6 +769,7 @@ impl App {
                     let running = self.overlay.is_some();
                     self.close_overlay();
                     self.preview = None;
+                    self.help = None;
                     self.cands.clear();
                     let old = self.profile().clone();
                     self.store.delete_profile(&old.name);
@@ -608,9 +777,7 @@ impl App {
                     self.cur = self.cur.saturating_sub(1);
                     self.prof_ctx = make_ctx(&self.store, &self.profiles[self.cur].id);
                     self.store.delete_data_later(&old.id);
-                    self.store.save_settings(&Settings {
-                        last_profile: self.profile().name.clone(),
-                    });
+                    self.save_settings();
                     if running {
                         self.open_overlay(t);
                     }
@@ -665,6 +832,30 @@ impl App {
             }
             "start" => self.open_overlay(t),
             "stop" => self.close_overlay(),
+            "init" => {
+                self.send_lang();
+                self.push();
+            }
+            "lang" => {
+                if let Some(code) = v["lang"].as_str() {
+                    if lang::valid(code) {
+                        self.lang = code.to_string();
+                        self.save_settings();
+                        self.send_lang();
+                        if self.overlay.is_some() {
+                            let texts = self.overlay_texts();
+                            if let Some(o) = &self.overlay {
+                                let _ = o.view.evaluate_script(&scripts::texts_js(&texts));
+                            }
+                        }
+                        if self.help.is_some() {
+                            self.help = None;
+                            self.open_help(t);
+                        }
+                        self.push();
+                    }
+                }
+            }
             "open_update" => {
                 if let Some(info) = &self.update {
                     if info.url.starts_with("https://github.com/Dralder/AllChats/") {
@@ -728,6 +919,10 @@ impl App {
                 let hidden: Vec<Item> =
                     serde_json::from_value(v["hidden"].clone()).unwrap_or_default();
                 self.profile_mut().hidden = hidden;
+                if v.get("fade").is_some() {
+                    let fade: Vec<Item> = serde_json::from_value(v["fade"].clone()).unwrap_or_default();
+                    self.profile_mut().fade = fade;
+                }
                 self.persist();
                 self.apply_overlay();
             }
@@ -829,7 +1024,11 @@ impl App {
             match ev {
                 WindowEvent::CloseRequested => {
                     self.preview = None;
+                    self.help = None;
                     self.push();
+                }
+                WindowEvent::Moved(_) => {
+                    self.place_help();
                 }
                 WindowEvent::Resized(size) => {
                     if size.width > 0 && size.height > 0 {
@@ -840,9 +1039,13 @@ impl App {
                             });
                         }
                     }
+                    self.place_help();
                 }
                 _ => {}
             }
+            return false;
+        }
+        if self.help.as_ref().map(|w| w.window.id()) == Some(id) {
             return false;
         }
         if self.overlay.as_ref().map(|w| w.window.id()) == Some(id) {

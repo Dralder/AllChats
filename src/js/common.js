@@ -55,6 +55,54 @@
     return n.slice(0, 60);
   };
 
+  U.rowOf = function (el) {
+    var skipCls = /^(active|selected|hover|focus|highlight|highlighted|new|odd|even|first|last|read|unread|pinned|deleted|hidden|visible|show|open|closed)$/i;
+    var best = null;
+    var cur = el;
+    while (cur && cur.nodeType === 1 && cur !== document.body && cur !== document.documentElement) {
+      var p = cur.parentElement;
+      if (!p) break;
+      var node = cur;
+      var same = Array.prototype.filter.call(p.children, function (x) { return x.tagName === node.tagName; });
+      var pw = p.getBoundingClientRect().width;
+      var cw = cur.getBoundingClientRect().width;
+      var narrow = pw > 0 && cw < pw * 0.6 && getComputedStyle(cur).display !== 'inline';
+      if (same.length >= 2 && !narrow) {
+        var cls = Array.prototype.filter.call(cur.classList, function (c) {
+          if (/\d{3,}/.test(c) || skipCls.test(c)) return false;
+          var n = 0;
+          for (var i = 0; i < same.length; i++) if (same[i].classList.contains(c)) n++;
+          return n >= same.length * 0.8;
+        }).slice(0, 4);
+        var members = same.filter(function (x) {
+          return cls.every(function (c) { return x.classList.contains(c); });
+        });
+        var attr = '';
+        if (!cls.length) {
+          var names = Array.prototype.map.call(cur.attributes, function (a) { return a.name; }).filter(function (n) {
+            return n.indexOf('data-') === 0 && members.every(function (m) { return m.hasAttribute(n); });
+          });
+          if (names.length) attr = '[' + names[0] + ']';
+        }
+        if (members.length >= 2 && (!best || members.length >= best.count)) {
+          best = { el: cur, cls: cls, attr: attr, count: members.length, parent: p };
+        }
+      }
+      cur = p;
+    }
+    if (!best) return { el: el, sel: U.pathOf(el), count: 1 };
+    var part = best.el.tagName.toLowerCase() + best.cls.map(function (c) { return '.' + esc(c); }).join('') + best.attr;
+    var pp = U.pathOf(best.parent);
+    var full = (pp ? pp + ' > ' : '') + part;
+    var found = [];
+    try { found = document.querySelectorAll(full); } catch (e) {}
+    if (Array.prototype.indexOf.call(found, best.el) < 0) {
+      full = U.pathOf(best.el);
+      found = [best.el];
+    }
+    return { el: best.el, sel: full, count: found.length };
+  };
+
   U.hasBg = function (el) {
     var cs = getComputedStyle(el);
     var c = cs.backgroundColor;

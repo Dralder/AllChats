@@ -4,6 +4,9 @@
   var bgs = __BGS__;
   var opacity = __OPACITY__;
   var showFrame = !__HIDE__;
+  var txtOk = __T_OK__;
+  var txtLost = __T_LOST__;
+  var txtLabel = __T_LABEL__;
   var style = document.createElement('style');
   var host = null;
   var shadow = null;
@@ -21,6 +24,160 @@
   var netTimer = null;
   var netFails = 0;
   var netBusy = false;
+
+  var fadeRules = __FADE__;
+  var fadeSecs = __FADESECS__;
+  var fadeKey = '';
+  var fadeSel = '';
+  var fadeObs = null;
+  var fadeAttrObs = null;
+  var fadeQueue = [];
+  var goneQueue = [];
+  var fadeTimer = null;
+  var fadeSeen = new WeakSet();
+  var fadeState = new WeakMap();
+  var fadeKeys = new Map();
+  var FADE_MS = 500;
+  function fadeCss() {
+    return '[data-ac-fade="1"]{transition:opacity ' + FADE_MS + 'ms linear!important;opacity:0!important}\n[data-ac-fade="2"]{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transition:none!important}';
+  }
+  function fadeKeyOf(el) {
+    var id = el.getAttribute('data-chat-entry') || el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
+    var t = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (!id && !t) return '';
+    return id + '|' + t;
+  }
+  function fadeSet(el, v) {
+    fadeState.set(el, v);
+    el.setAttribute('data-ac-fade', v);
+  }
+  function fadePrune(now) {
+    if (fadeKeys.size <= 2000) return;
+    fadeKeys.forEach(function (e, k) {
+      if (e.due < now - 60000) fadeKeys.delete(k);
+    });
+    while (fadeKeys.size > 3000) fadeKeys.delete(fadeKeys.keys().next().value);
+  }
+  function fadeArm() {
+    if (fadeTimer) return;
+    var next = Infinity;
+    if (fadeQueue.length) next = fadeQueue[0].due;
+    if (goneQueue.length && goneQueue[0].due < next) next = goneQueue[0].due;
+    if (next === Infinity) return;
+    fadeTimer = setTimeout(fadeTick, Math.max(30, next - performance.now()));
+  }
+  function fadeTick() {
+    fadeTimer = null;
+    var now = performance.now();
+    while (fadeQueue.length && fadeQueue[0].due <= now) {
+      var it = fadeQueue.shift();
+      if (it.el.isConnected) {
+        fadeSet(it.el, '1');
+        goneQueue.push({ el: it.el, due: now + FADE_MS + 50 });
+      }
+    }
+    while (goneQueue.length && goneQueue[0].due <= now) {
+      var g = goneQueue.shift();
+      if (g.el.isConnected) fadeSet(g.el, '2');
+    }
+    fadeArm();
+  }
+  function fadeReg(el) {
+    if (fadeSeen.has(el)) return;
+    fadeSeen.add(el);
+    var now = performance.now();
+    var due = now + fadeSecs * 1000;
+    var k = fadeKeyOf(el);
+    if (k) {
+      var e = fadeKeys.get(k);
+      var prev = e && e.ref ? e.ref.deref() : null;
+      if (e && now < e.due + 5000 && !(prev && prev !== el && prev.isConnected)) {
+        due = e.due;
+        e.ref = new WeakRef(el);
+      } else {
+        fadeKeys.set(k, { due: due, ref: new WeakRef(el) });
+        fadePrune(now);
+      }
+    }
+    if (due <= now) {
+      fadeSet(el, '2');
+      return;
+    }
+    var i = fadeQueue.length;
+    while (i > 0 && fadeQueue[i - 1].due > due) i--;
+    fadeQueue.splice(i, 0, { el: el, due: due });
+    if (i === 0 && fadeTimer) {
+      clearTimeout(fadeTimer);
+      fadeTimer = null;
+    }
+    fadeArm();
+  }
+  function fadeScan(root) {
+    if (!fadeSel || root.nodeType !== 1) return;
+    try {
+      if (root.matches(fadeSel)) fadeReg(root);
+      var list = root.querySelectorAll(fadeSel);
+      for (var i = 0; i < list.length; i++) fadeReg(list[i]);
+    } catch (e) {}
+  }
+  function fadeObserve() {
+    if (!document.documentElement) return;
+    if (!fadeObs) {
+      fadeObs = new MutationObserver(function (muts) {
+        for (var i = 0; i < muts.length; i++) {
+          var added = muts[i].addedNodes;
+          for (var j = 0; j < added.length; j++) fadeScan(added[j]);
+        }
+      });
+      fadeObs.observe(document.documentElement, { childList: true, subtree: true });
+    }
+    if (!fadeAttrObs) {
+      fadeAttrObs = new MutationObserver(function (muts) {
+        for (var i = 0; i < muts.length; i++) {
+          var t = muts[i].target;
+          var v = fadeState.get(t);
+          if (v && t.getAttribute('data-ac-fade') !== v) t.setAttribute('data-ac-fade', v);
+        }
+      });
+      fadeAttrObs.observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ['data-ac-fade'] });
+    }
+  }
+  function fadeStop() {
+    if (fadeObs) { fadeObs.disconnect(); fadeObs = null; }
+    if (fadeAttrObs) { fadeAttrObs.disconnect(); fadeAttrObs = null; }
+  }
+  function fadeApply(rules, secs) {
+    var key = JSON.stringify(rules) + '|' + secs;
+    if (key === fadeKey) {
+      if (fadeSel && !fadeObs) {
+        fadeObserve();
+        if (document.documentElement) fadeScan(document.documentElement);
+      }
+      return;
+    }
+    fadeKey = key;
+    fadeRules = rules;
+    fadeSecs = secs;
+    if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
+    fadeQueue = [];
+    goneQueue = [];
+    fadeSeen = new WeakSet();
+    fadeState = new WeakMap();
+    fadeKeys.clear();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ac-fade]'), function (el) {
+      el.removeAttribute('data-ac-fade');
+    });
+    var valid = rules.filter(function (r) {
+      try { document.createDocumentFragment().querySelector(r.sel); return true; } catch (e) { return false; }
+    }).map(function (r) { return r.sel; });
+    fadeSel = secs > 0 ? valid.join(',') : '';
+    if (!fadeSel) {
+      fadeStop();
+      return;
+    }
+    fadeObserve();
+    if (document.documentElement) fadeScan(document.documentElement);
+  }
 
   function zoom() {
     return window.__acZoom || 1;
@@ -90,6 +247,8 @@
     var css = hidden.map(function (i) { return i.sel + '{display:none!important}'; }).join('\n');
     css += '\n' + U.bgCss(bgs);
     css += '\n' + U.baseCss(opacity);
+    css += '\n*::-webkit-scrollbar{display:none!important}\nhtml{scrollbar-width:none!important}';
+    css += '\n' + fadeCss();
     style.textContent = css;
     U.applyBgDirect(opacity);
   }
@@ -121,10 +280,11 @@
       '.rs{left:' + c + 'px;right:' + c + 'px;bottom:0;height:' + e + 'px;cursor:s-resize}' +
       '.rse{right:0;bottom:0;width:' + c + 'px;height:' + c + 'px;background:#7B2CBF;cursor:se-resize}';
     shadow.innerHTML = '<style>' + css + '</style>' +
-      '<div class="f"></div><div class="d" data-op="drag"><span class="lbl">Overlay</span></div><div class="btn" data-op="close">X</div>' +
+      '<div class="f"></div><div class="d" data-op="drag"><span class="lbl"></span></div><div class="btn" data-op="close">X</div>' +
       '<div class="r rnw" data-dir="NW"></div><div class="r rn" data-dir="N"></div><div class="r rne" data-dir="NE"></div>' +
       '<div class="r rw" data-dir="W"></div><div class="r re" data-dir="E"></div>' +
       '<div class="r rsw" data-dir="SW"></div><div class="r rs" data-dir="S"></div><div class="r rse" data-dir="SE"></div>';
+    shadow.querySelector('.lbl').textContent = txtLabel;
     shadow.addEventListener('mousedown', function (ev) {
       var t = ev.target;
       if (!t || !t.getAttribute) return;
@@ -180,12 +340,25 @@
     if (v === null || v === undefined) return;
     if (!ensureConn()) return;
     if (v) {
-      connBox.textContent = 'Connected';
+      connBox.textContent = txtOk;
       connBox.style.color = '#FFFFFF';
       connTimer = setTimeout(function () { connTimer = null; hideConn(); }, 5000);
     } else {
-      connBox.textContent = 'Connection lost';
+      connBox.textContent = txtLost;
       connBox.style.color = '#D04040';
+    }
+  };
+
+  window.__acText = function (ok, lost, label) {
+    txtOk = ok;
+    txtLost = lost;
+    txtLabel = label;
+    if (host && shadow) {
+      var lbl = shadow.querySelector('.lbl');
+      if (lbl) lbl.textContent = txtLabel;
+    }
+    if (connLast !== null && connLast !== undefined && connBox && connHost && connHost.parentElement) {
+      connBox.textContent = connLast ? txtOk : txtLost;
     }
   };
 
@@ -301,7 +474,7 @@
     setupAutoScroll(!showFrame);
   };
 
-  window.__acApply = function (h, b, op, a, s, edit) {
+  window.__acApply = function (h, b, op, a, s, edit, fade, secs) {
     hidden = h;
     bgs = b;
     opacity = op;
@@ -311,6 +484,7 @@
     U.setAuto(a);
     window.__ac7Config(s);
     setupAutoScroll(!showFrame);
+    fadeApply(fade || [], secs || 0);
   };
 
   render();
@@ -321,4 +495,5 @@
   U.setAuto(__AUTO__);
   window.__ac7Config(__SEVEN__);
   setupAutoScroll(showFrame === false);
+  fadeApply(fadeRules, fadeSecs);
 })();

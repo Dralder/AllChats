@@ -5,7 +5,7 @@ use std::{fs, path::PathBuf};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-fn new_id() -> String {
+pub fn new_id() -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -53,6 +53,7 @@ pub struct Profile {
     pub name: String,
     pub url: String,
     pub hidden: Vec<Item>,
+    pub fade: Vec<Item>,
     pub backgrounds: Vec<Item>,
     pub auto_bg: bool,
     pub seven_tv: bool,
@@ -61,6 +62,7 @@ pub struct Profile {
     pub conn_check: bool,
     #[serde(default = "default_zoom")]
     pub zoom: f64,
+    pub fade_secs: u32,
     pub x: i32,
     pub y: i32,
     pub w: u32,
@@ -78,6 +80,7 @@ impl Default for Profile {
             name: "Default".into(),
             url: String::new(),
             hidden: Vec::new(),
+            fade: Vec::new(),
             backgrounds: Vec::new(),
             auto_bg: true,
             seven_tv: true,
@@ -85,6 +88,7 @@ impl Default for Profile {
             hide_border: false,
             conn_check: true,
             zoom: 1.0,
+            fade_secs: 0,
             x: 100,
             y: 100,
             w: 420,
@@ -106,12 +110,14 @@ impl Profile {
 #[serde(default)]
 pub struct Settings {
     pub last_profile: String,
+    pub lang: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             last_profile: "Default".into(),
+            lang: String::new(),
         }
     }
 }
@@ -159,6 +165,7 @@ impl Store {
         let profiles = root.join("profiles");
         let _ = fs::create_dir_all(&profiles);
         let _ = fs::create_dir_all(root.join("webdata"));
+        let _ = fs::create_dir_all(root.join("lang"));
         Self { root, profiles }
     }
 

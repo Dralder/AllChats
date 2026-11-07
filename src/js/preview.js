@@ -4,6 +4,7 @@
   var U = window.__acU;
   var hidden = __HIDDEN__;
   var bgs = __BGS__;
+  var fade = __FADE__;
   var opacity = __OPACITY__;
   var style = document.createElement('style');
   var box = document.createElement('div');
@@ -13,8 +14,9 @@
 
   function render() {
     var css = hidden.map(function (i) {
-      return i.sel + '{opacity:.15!important;outline:2px dashed #7B2CBF!important}';
+      return i.sel + '{opacity:.15!important;outline:2px solid #B83232!important;outline-offset:-2px!important}';
     }).join('\n');
+    css += '\n' + fade.map(function (i) { return i.sel + '{outline:2px solid #D4A94A!important;outline-offset:-2px!important}'; }).join('\n');
     css += '\n' + U.bgCss(bgs);
     css += '\n' + U.baseCss(opacity);
     style.textContent = css;
@@ -69,7 +71,7 @@
   }
 
   function send() {
-    window.ipc.postMessage(JSON.stringify({ t: 'lists', hidden: hidden }));
+    window.ipc.postMessage(JSON.stringify({ t: 'lists', hidden: hidden, fade: fade }));
   }
 
   function onMove(e) {
@@ -104,7 +106,29 @@
     }
   });
 
+  function onContext(e) {
+    var r = resolve(e);
+    if (!r) return;
+    var cur = r.el;
+    var found = -1;
+    while (cur && cur.nodeType === 1 && !skip(cur) && found < 0) {
+      found = matchIn(fade, cur);
+      cur = cur.parentElement;
+    }
+    if (found >= 0) {
+      fade.splice(found, 1);
+    } else {
+      var row = U.rowOf(r.el);
+      if (row.sel && !fade.some(function (x) { return x.sel === row.sel; })) {
+        fade.push({ sel: row.sel, name: (U.nameOf(row.el, false) + ' x' + row.count).slice(0, 60) });
+      }
+    }
+    render();
+    send();
+  }
+
   function onClick(e) {
+    if (e.type === 'contextmenu') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); onContext(e); return; }
     if (e.type !== 'click') {
       e.preventDefault();
       e.stopPropagation();
@@ -134,9 +158,10 @@
   window.addEventListener('mousemove', onMove, true);
   window.addEventListener('scroll', function () { box.style.display = 'none'; }, true);
 
-  window.__acApply = function (h, b, op, a, s) {
+  window.__acApply = function (h, b, op, a, s, edit, fd) {
     hidden = h;
     bgs = b;
+    fade = fd || [];
     opacity = op;
     render();
     mount();
