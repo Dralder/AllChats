@@ -3,11 +3,11 @@
 <details>
 <summary><b>English</b></summary>
 
-Displays your stream's chat on top of any borderless game.
+Displays your stream's chat on top of any borderless game, or in its own normal window.
 
 ## What it does
 
-AllChats opens a chat page (Kick, Twitch, YouTube or any web page) as a transparent window that stays on top of your game. You choose what to hide, what fades away, and whether to keep the page's backgrounds.
+AllChats opens a chat page (Kick, Twitch, YouTube or any web page) as a transparent window that stays on top of your game. You choose what to hide, what fades away, and whether to keep the page's backgrounds. Window mode opens the same pages in normal windows instead.
 
 ## Features
 
@@ -21,7 +21,10 @@ AllChats opens a chat page (Kick, Twitch, YouTube or any web page) as a transpar
 - Auto clear page backgrounds and scrollbars
 - Click-through mode that always shows the newest message
 - Hide border mode
+- Custom, Kick and Twitch buttons: type just a username or a full link
+- Window mode: separate Custom, Kick and Twitch windows that can run at the same time
 - 7TV emotes on Kick, Twitch and YouTube
+- 7TV emote menu in window mode for supported websites
 - Connection status text on the overlay
 - Preview keys help window
 - English and Farsi
@@ -30,13 +33,19 @@ AllChats opens a chat page (Kick, Twitch, YouTube or any web page) as a transpar
 ## How to use
 
 1. Create or select a profile.
-2. Enter the chat page URL and open the Preview.
+2. Pick Custom, Kick or Twitch, then enter the chat page URL or username and open the Preview.
 3. In the preview:
    - Left click an element to hide it (red border)
    - Right click a message to make it fade (yellow border)
    - Shift + click selects the parent element.
 4. Set the message fade timer (Off by default).
 5. Click Show Overlay.
+
+### Window mode
+
+1. Switch to Window at the top.
+2. Pick Custom, Kick or Twitch and enter the URL or username.
+3. Click Start. Each type opens its own window, and you can run all three together.
 
 ## Requirements
 
@@ -53,11 +62,11 @@ Made by Dralder.  [KICK](https://kick.com/dralder)  [Telegram](https://t.me/dral
 
 <div dir="rtl">
 
-چت استریم شما را روی هر بازی بدون حاشیه (borderless) نمایش می‌دهد.
+چت استریم شما را روی هر بازی بدون حاشیه (borderless) یا در پنجره جداگانه نمایش می‌دهد.
 
 ## این برنامه چه کاری می‌کند
 
-یک صفحه چت (Kick، Twitch، YouTube یا هر صفحه وب) را به‌صورت یک پنجره شفاف باز می‌کند که بالای بازی شما می‌ماند. شما انتخاب می‌کنید چه چیزی پنهان شود، چه چیزی محو شود و پس‌زمینه‌های صفحه حفظ شوند یا نه.
+یک صفحه چت (Kick، Twitch، YouTube یا هر صفحه وب) را به‌صورت یک پنجره شفاف باز می‌کند که بالای بازی شما می‌ماند. شما انتخاب می‌کنید چه چیزی پنهان شود، چه چیزی محو شود و پس‌زمینه‌های صفحه حفظ شوند یا نه. حالت پنجره همین صفحه‌ها را در پنجره‌های معمولی باز می‌کند.
 
 ## امکانات
 
@@ -71,7 +80,10 @@ Made by Dralder.  [KICK](https://kick.com/dralder)  [Telegram](https://t.me/dral
 - پاک‌سازی خودکار پس‌زمینه‌ها و نوار اسکرول صفحه
 - حالت عبور کلیک که همیشه جدیدترین پیام را نشان می‌دهد
 - حالت پنهان کردن حاشیه
+- دکمه‌های Custom، Kick و Twitch: فقط نام کاربری یا لینک کامل را وارد کنید
+- حالت پنجره: پنجره‌های جداگانه Custom، Kick و Twitch که همزمان کار می‌کنند
 - ایموت‌های 7TV در Kick، Twitch و YouTube
+- منوی ایموت 7TV در حالت پنجره برای وبسایت های پشتیبانی شده
 - نمایش وضعیت اتصال روی اورلی
 - پنجره راهنمای کلیدهای پیش‌نمایش
 - انگلیسی و فارسی
@@ -80,13 +92,19 @@ Made by Dralder.  [KICK](https://kick.com/dralder)  [Telegram](https://t.me/dral
 ## نحوه استفاده
 
 1. یک پروفایل بسازید یا انتخاب کنید.
-2. آدرس صفحه چت را وارد کنید و پیش‌نمایش را باز کنید.
+2. Custom، Kick یا Twitch را انتخاب کنید، آدرس صفحه چت یا نام کاربری را وارد کنید و پیش‌نمایش را باز کنید.
 3. در پیش‌نمایش:
    - روی یک المان کلیک چپ کنید تا پنهان شود (کادر قرمز)
    - روی یک پیام کلیک راست کنید تا محو شود (کادر زرد)
    - Shift + کلیک، المان والد را انتخاب می‌کند.
 4. تایمر محو شدن پیام را تنظیم کنید (به‌صورت پیش‌فرض خاموش است).
 5. روی نمایش اورلی کلیک کنید.
+
+### حالت پنجره
+
+1. بالای برنامه روی Window بزنید.
+2. Custom، Kick یا Twitch را انتخاب کنید و آدرس یا نام کاربری را وارد کنید.
+3. روی Start کلیک کنید. هر نوع پنجره جداگانه باز می‌شود و می‌توانید هر سه را همزمان اجرا کنید.
 
 ## نیازمندی‌ها
 
