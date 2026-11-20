@@ -9,7 +9,8 @@ body { --f: 'AC-EN', Consolas, "Segoe UI", monospace; height: 100%; background: 
 body.fa { --f: 'AC-FA', Tahoma, "Segoe UI", sans-serif; }
 html { height: 100%; background: #202020; color: #E0E0E0; overflow: hidden; }
 #bar { height: 32px; display: flex; align-items: center; background: #202020; color: #8A8A8A; font-size: 12px; direction: ltr; }
-#drag { flex: 1; height: 32px; line-height: 32px; padding-left: 12px; }
+#drag { flex: none; height: 32px; line-height: 32px; padding-left: 12px; padding-right: 12px; }
+#drag2 { flex: 1; height: 32px; }
 #bar button { width: 44px; height: 32px; border: 0; border-radius: 0; background: transparent; color: #E0E0E0; font-size: 13px; font-family: var(--f); cursor: pointer; }
 #bar button:hover { background: #2A2A2D; }
 #bar button#close:hover { background: #D04040; }
@@ -43,7 +44,7 @@ button.main { width: 100%; height: 44px; font-size: 14px; }
 .item span { color: #8A8A8A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item button { width: 20px; height: 20px; flex: none; border: 0; border-radius: 5px; background: #B83232; color: #fff; font-size: 12px; font-weight: bold; font-family: var(--f); cursor: pointer; line-height: 20px; }
 .item button:hover { background: #D04040; }
-.empty { color: #8A8A8A; text-align: center; line-height: 56px; font-size: 12px; }
+.empty { color: #8A8A8A; text-align: center; line-height: 44px; font-size: 12px; }
 .check { display: flex; align-items: center; gap: 10px; cursor: pointer; height: 24px; }
 .check input { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border-radius: 5px; background: #202020; border: 1px solid #575757; position: relative; cursor: pointer; flex: none; }
 .check input:checked { background: #7B2CBF; border-color: #7B2CBF; }
@@ -71,19 +72,34 @@ body.fa #foot { direction: rtl; }
 #cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: stretch; }
 .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 #colL .card:last-child { flex: 1; }
-#colL .card:last-child #list { flex: 1; min-height: 64px; height: auto; }
+#colL .card:last-child #list { flex: 1; min-height: 52px; height: auto; }
 #colR .card:first-child { flex: 1; justify-content: space-between; }
+#bar #mdOv, #bar #mdWin { font-family: var(--f); }
+.tabs { direction: ltr; display: flex; gap: 6px; height: 30px; }
+.tabs button { flex: 1; min-width: 0; height: 30px; border: 0; border-radius: 5px; background: #202020; color: #8A8A8A; font-size: 13px; font-weight: bold; line-height: 30px; font-family: var(--f); cursor: pointer; padding: 0; overflow: hidden; }
+.tabs button:hover { background: #3A3A3D; color: #E0E0E0; }
+.tabs button.on { background: #7B2CBF; color: #fff; }
+#pgWin { display: flex; flex-direction: column; gap: 8px; width: 420px; max-width: 100%; margin: 0 auto; }
+button.b.seg { flex: 1; background: #202020; border: 1px solid #575757; color: #8A8A8A; }
+button.b.seg:hover { background: #2A2A2D; }
+button.b.seg.on { background: #7B2CBF; border-color: #7B2CBF; color: #fff; }
+body.fa #wInput { direction: ltr; text-align: left; }
+body.fa #pgWin .row { direction: ltr; }
 </style>
 </head>
 <body>
 <div id="bar">
   <div id="drag">AllChats</div>
+  <button class="lg" id="mdOv" data-i="mode.overlay">Overlay</button>
+  <button class="lg" id="mdWin" data-i="mode.window">Window</button>
+  <div id="drag2"></div>
   <button class="lg" id="lgFa">فارسی</button>
   <button class="lg" id="lgEn">English</button>
   <button id="min">&#8211;</button>
   <button id="close">&#10005;</button>
 </div>
 <div id="main">
+<div id="pgOv">
 <div id="cols">
 <div class="col" id="colL">
   <div class="card">
@@ -106,7 +122,11 @@ body.fa #foot { direction: rtl; }
     </div>
   </div>
   <div class="card">
-    <div class="label" data-i="page">PAGE</div>
+    <div class="tabs">
+      <button id="okCustom" data-i="w.custom">Custom</button>
+      <button id="okKick" data-i="w.kick">Kick</button>
+      <button id="okTwitch" data-i="w.twitch">Twitch</button>
+    </div>
     <input type="text" id="url" spellcheck="false" data-i-ph="page.ph" placeholder="https://...">
     <button class="b" id="preview">Preview</button>
   </div>
@@ -130,13 +150,30 @@ body.fa #foot { direction: rtl; }
     <input type="range" id="op" min="0" max="100" value="0">
     <div class="between"><span class="muted" data-i="zoom">Zoom</span><span class="val" id="zmVal">100%</span></div>
     <input type="range" id="zm" min="50" max="200" step="5" value="100">
-    <div class="between"><span class="muted" id="fdLbl" data-i="fade">Message fade timer</span><span class="val" id="fdVal">Off</span></div>
+    <div class="between"><span class="muted" id="fdLbl" data-i="fade">Chat fade timer</span><span class="val" id="fdVal">Off</span></div>
     <input type="range" id="fd" min="0" max="120" step="1" value="0">
   </div>
   <button class="b main" id="toggle">Show Overlay</button>
 </div>
 </div>
-  <div id="foot"><span data-i="foot">Made by</span> <span>Dralder</span> v1.1.0</div>
+</div>
+<div id="pgWin" class="hidden">
+  <div class="card">
+    <div class="label" data-i="w.title">WINDOW</div>
+    <div class="row">
+      <button class="b seg" id="wkCustom" data-i="w.custom">Custom</button>
+      <button class="b seg" id="wkKick" data-i="w.kick">Kick</button>
+      <button class="b seg" id="wkTwitch" data-i="w.twitch">Twitch</button>
+    </div>
+    <input type="text" id="wInput" spellcheck="false" placeholder="https://...">
+    <label class="check"><input type="checkbox" id="wSeven"><span data-i="opt.seven">7TV emotes</span></label>
+    <label class="check"><input type="checkbox" id="wTop"><span data-i="w.topmost">Always on top</span></label>
+    <div class="row" style="align-items:center;gap:8px"><span data-i="w.zoom" style="font-size:12px">Zoom</span><input type="range" id="wZoom" min="50" max="200" step="5" value="100" style="flex:1"><span id="wZoomV" style="font-size:12px;min-width:36px;text-align:right">100%</span></div>
+    <button class="b hidden" id="wLogin">Login</button>
+  </div>
+  <button class="b main" id="wToggle">Start</button>
+</div>
+  <div id="foot"><span data-i="foot">Made by</span> <span>Dralder</span> v1.2.0</div>
 </div>
 <div id="updDialog" style="position:fixed;top:32px;left:0;right:0;bottom:0;background:rgba(32,32,32,0.88);display:none;align-items:center;justify-content:center;z-index:9999">
   <div style="background:#2A2A2D;border:1px solid #575757;border-radius:10px;padding:16px;width:300px;color:#E0E0E0;text-align:center">
@@ -164,7 +201,7 @@ body.fa #foot { direction: rtl; }
 <div id="langPick" style="position:fixed;top:32px;left:0;right:0;bottom:0;background:rgba(32,32,32,0.97);display:none;align-items:center;justify-content:center;z-index:20000"><div style="background:#2A2A2D;border:1px solid #575757;border-radius:10px;padding:20px;width:300px;color:#E0E0E0;text-align:center"><div style="color:#A78BFA;font-size:15px;margin-bottom:16px;direction:rtl;font-family:'AC-FA',Tahoma,'Segoe UI',sans-serif">زبان برنامه را انتخاب کنید</div><div style="display:flex;gap:8px"><button class="b" id="pickFa" style="flex:1;height:44px;font-family:'AC-FA',Tahoma,'Segoe UI',sans-serif">فارسی</button><button class="b" id="pickEn" style="flex:1;height:44px;font-family:'AC-EN',Consolas,'Segoe UI',monospace">English</button></div></div></div>
 <script>
 var $ = function (id) { return document.getElementById(id); };
-var state = { overlay: false, preview: false, bgs: [], cands: [], profiles: [], lang: '' };
+var state = { overlay: false, preview: false, bgs: [], cands: [], profiles: [], lang: '', mode: 'overlay', w: { kind: 'custom', url: '', kick: '', twitch: '', topmost: false, seven: true, running: false, link: '' } };
 var shownTag = null;
 var updState = 'ask';
 var dlgCb = null;
@@ -451,7 +488,12 @@ window.setState = function (s) {
     if (n === s.current) o.selected = true;
     sel.appendChild(o);
   });
-  if (document.activeElement !== $('url')) $('url').value = s.url;
+  var ok = s.kind || 'custom';
+  $('okCustom').classList.toggle('on', ok === 'custom');
+  $('okKick').classList.toggle('on', ok === 'kick');
+  $('okTwitch').classList.toggle('on', ok === 'twitch');
+  $('url').placeholder = t(ok === 'custom' ? 'w.url.ph' : 'w.user.ph');
+  if (document.activeElement !== $('url')) $('url').value = ok === 'custom' ? s.url : (ok === 'kick' ? s.kick : s.twitch);
   $('border').checked = s.hide_border;
   $('autobg').checked = s.auto_bg;
   $('seven').checked = s.seven_tv;
@@ -478,9 +520,66 @@ window.setState = function (s) {
   tog.className = s.overlay ? 'b main danger' : 'b main';
   $('del').disabled = s.profiles.length < 2;
   $('dup').title = t('profile.dup') + ': ' + s.current;
+  renderWin(s);
 };
 
+var lastFit = 0;
+function fitWin() {
+  if (state.mode !== 'window') { lastFit = 0; return; }
+  var h = Math.ceil($('main').getBoundingClientRect().bottom) + 2;
+  if (h !== lastFit) { lastFit = h; send({ cmd: 'fit', h: h }); }
+}
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitWin);
+
+function renderWin(s) {
+  var w = s.w || state.w;
+  var isWin = s.mode === 'window';
+  $('pgOv').classList.toggle('hidden', isWin);
+  $('pgWin').classList.toggle('hidden', !isWin);
+  $('mdOv').classList.toggle('on', !isWin);
+  $('mdWin').classList.toggle('on', isWin);
+  $('wkCustom').classList.toggle('on', w.kind === 'custom');
+  $('wkKick').classList.toggle('on', w.kind === 'kick');
+  $('wkTwitch').classList.toggle('on', w.kind === 'twitch');
+  var inp = $('wInput');
+  inp.placeholder = t(w.kind === 'custom' ? 'w.url.ph' : 'w.user.ph');
+  if (document.activeElement !== inp) inp.value = w.kind === 'custom' ? w.url : (w.kind === 'kick' ? w.kick : w.twitch);
+  $('wTop').checked = !!w.topmost;
+  $('wSeven').checked = !!w.seven;
+  if (document.activeElement !== $('wZoom')) { var zp = Math.round((w.zoom || 1) * 100); $('wZoom').value = zp; $('wZoomV').textContent = zp + '%'; }
+  var lg = $('wLogin');
+  lg.classList.toggle('hidden', w.kind === 'custom');
+  lg.textContent = t(w.kind === 'twitch' ? 'w.login.twitch' : 'w.login.kick');
+  $('wToggle').textContent = t(w.running ? 'w.stop' : 'w.start');
+  $('wToggle').className = w.running ? 'b main danger' : 'b main';
+  $('wToggle').disabled = !w.link && !w.running;
+  fitWin();
+}
+
+function wField() {
+  var k = state.w.kind;
+  var o = { cmd: 'wset' };
+  o[k === 'custom' ? 'url' : k] = $('wInput').value;
+  return o;
+}
+
 $('drag').addEventListener('mousedown', function (e) { if (e.button === 0) send({ cmd: 'drag' }); });
+$('drag2').addEventListener('mousedown', function (e) { if (e.button === 0) send({ cmd: 'drag' }); });
+$('mdOv').onclick = function () { send({ cmd: 'mode', mode: 'overlay' }); };
+$('mdWin').onclick = function () { send({ cmd: 'mode', mode: 'window' }); };
+$('wkCustom').onclick = function () { send({ cmd: 'wset', kind: 'custom' }); };
+$('wkKick').onclick = function () { send({ cmd: 'wset', kind: 'kick' }); };
+$('wkTwitch').onclick = function () { send({ cmd: 'wset', kind: 'twitch' }); };
+$('wInput').addEventListener('change', function () { send(wField()); });
+$('wInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') { send(wField()); this.blur(); } });
+$('wTop').onchange = function () { send({ cmd: 'wset', topmost: this.checked }); };
+$('wZoom').oninput = function () { $('wZoomV').textContent = this.value + '%'; send({ cmd: 'wset', zoom: this.value / 100 }); };
+$('wSeven').onchange = function () { send({ cmd: 'wset', seven: this.checked }); };
+$('wLogin').onclick = function () { send({ cmd: 'wlogin' }); };
+$('wToggle').onclick = function () {
+  if (!state.w.running) send(wField());
+  send({ cmd: state.w.running ? 'wstop' : 'wstart' });
+};
 $('min').onclick = function () { send({ cmd: 'min' }); };
 $('close').onclick = function () { send({ cmd: 'close' }); };
 $('lgFa').onclick = function () { send({ cmd: 'lang', lang: 'fa' }); };
@@ -549,12 +648,21 @@ $('renameInput').addEventListener('keydown', function (e) {
   if (e.key === 'Escape') renameMode(false);
 });
 
-function sendUrl() { send({ cmd: 'set', url: $('url').value }); }
+function urlMsg() {
+  var k = state.kind || 'custom';
+  var o = { cmd: 'set' };
+  o[k === 'custom' ? 'url' : k] = $('url').value;
+  return o;
+}
+function sendUrl() { send(urlMsg()); }
+$('okCustom').onclick = function () { send({ cmd: 'set', kind: 'custom' }); };
+$('okKick').onclick = function () { send({ cmd: 'set', kind: 'kick' }); };
+$('okTwitch').onclick = function () { send({ cmd: 'set', kind: 'twitch' }); };
 $('url').addEventListener('change', sendUrl);
 $('url').addEventListener('keydown', function (e) { if (e.key === 'Enter') { sendUrl(); this.blur(); } });
 
 $('preview').onclick = function () {
-  if (!state.preview) send({ cmd: 'set', url: $('url').value });
+  if (!state.preview) send(urlMsg());
   send({ cmd: 'preview' });
 };
 
@@ -596,7 +704,7 @@ $('fd').addEventListener('change', function () {
 });
 
 $('toggle').onclick = function () {
-  if (!state.overlay) send({ cmd: 'set', url: $('url').value });
+  if (!state.overlay) send(urlMsg());
   send({ cmd: state.overlay ? 'stop' : 'start' });
 };
 

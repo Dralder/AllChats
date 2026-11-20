@@ -37,9 +37,9 @@
   var fadeSeen = new WeakSet();
   var fadeState = new WeakMap();
   var fadeKeys = new Map();
-  var FADE_MS = 500;
+  var FADE_MS = 900;
   function fadeCss() {
-    return '[data-ac-fade="1"]{transition:opacity ' + FADE_MS + 'ms linear!important;opacity:0!important}\n[data-ac-fade="2"]{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transition:none!important}';
+    return '[data-ac-fade="1"]{will-change:opacity}\n[data-ac-fade="2"]{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transition:none!important}';
   }
   function fadeKeyOf(el) {
     var id = el.getAttribute('data-chat-entry') || el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
@@ -50,6 +50,12 @@
   function fadeSet(el, v) {
     fadeState.set(el, v);
     el.setAttribute('data-ac-fade', v);
+    if (v === '1') {
+      try {
+        var a = el.animate([{ opacity: getComputedStyle(el).opacity }, { opacity: 0 }], { duration: FADE_MS, easing: 'ease-out', fill: 'forwards' });
+        a.id = 'ac-fade';
+      } catch (e) {}
+    }
   }
   function fadePrune(now) {
     if (fadeKeys.size <= 2000) return;
@@ -166,6 +172,9 @@
     fadeKeys.clear();
     Array.prototype.forEach.call(document.querySelectorAll('[data-ac-fade]'), function (el) {
       el.removeAttribute('data-ac-fade');
+      try {
+        el.getAnimations().forEach(function (a) { if (a.id === 'ac-fade') a.cancel(); });
+      } catch (e) {}
     });
     var valid = rules.filter(function (r) {
       try { document.createDocumentFragment().querySelector(r.sel); return true; } catch (e) { return false; }
