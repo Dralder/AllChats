@@ -52,6 +52,9 @@ pub struct Profile {
     pub id: String,
     pub name: String,
     pub url: String,
+    pub kind: String,
+    pub kick: String,
+    pub twitch: String,
     pub hidden: Vec<Item>,
     pub fade: Vec<Item>,
     pub backgrounds: Vec<Item>,
@@ -79,6 +82,9 @@ impl Default for Profile {
             id: new_id(),
             name: "Default".into(),
             url: String::new(),
+            kind: "custom".into(),
+            kick: String::new(),
+            twitch: String::new(),
             hidden: Vec::new(),
             fade: Vec::new(),
             backgrounds: Vec::new(),
@@ -108,9 +114,81 @@ impl Profile {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
+pub struct Geo {
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub w: u32,
+    pub h: u32,
+}
+
+impl Default for Geo {
+    fn default() -> Self {
+        Self { x: None, y: None, w: 480, h: 720 }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct Opt {
+    pub topmost: bool,
+    pub seven: bool,
+    pub zoom: f64,
+}
+
+impl Default for Opt {
+    fn default() -> Self {
+        Self { topmost: false, seven: true, zoom: 1.0 }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct WinCfg {
+    pub kind: String,
+    pub url: String,
+    pub kick: String,
+    pub twitch: String,
+    pub topmost: bool,
+    pub seven: bool,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub w: u32,
+    pub h: u32,
+    pub geo: std::collections::HashMap<String, Geo>,
+    pub open: Vec<String>,
+    pub opts: std::collections::HashMap<String, Opt>,
+}
+
+impl Default for WinCfg {
+    fn default() -> Self {
+        Self {
+            kind: "custom".into(),
+            url: String::new(),
+            kick: String::new(),
+            twitch: String::new(),
+            topmost: false,
+            seven: true,
+            x: None,
+            y: None,
+            w: 480,
+            h: 720,
+            geo: std::collections::HashMap::new(),
+            open: Vec::new(),
+            opts: std::collections::HashMap::new(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct Settings {
     pub last_profile: String,
     pub lang: String,
+    pub mode: String,
+    pub win: WinCfg,
+    pub ctl_x: Option<i32>,
+    pub ctl_y: Option<i32>,
+    pub overlay_open: Option<bool>,
 }
 
 impl Default for Settings {
@@ -118,6 +196,11 @@ impl Default for Settings {
         Self {
             last_profile: "Default".into(),
             lang: String::new(),
+            mode: "overlay".into(),
+            win: WinCfg::default(),
+            ctl_x: None,
+            ctl_y: None,
+            overlay_open: None,
         }
     }
 }
@@ -147,8 +230,15 @@ fn safe_name(name: &str) -> String {
 }
 
 fn write_atomic(path: &PathBuf, data: &str) {
+    use std::io::Write;
     let tmp = path.with_extension("tmp");
-    if fs::write(&tmp, data).is_ok() {
+    let wrote = fs::File::create(&tmp)
+        .and_then(|mut f| {
+            f.write_all(data.as_bytes())?;
+            f.sync_all()
+        })
+        .is_ok();
+    if wrote {
         if fs::rename(&tmp, path).is_err() {
             let _ = fs::write(path, data);
             let _ = fs::remove_file(&tmp);

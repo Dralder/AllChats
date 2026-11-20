@@ -1,0 +1,50 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#202020;color:#8A8A8A;font-family:"Segoe UI",Tahoma,sans-serif;font-size:12px;overflow:hidden;user-select:none;-webkit-user-select:none}
+#bar{height:32px;display:flex;align-items:center;direction:ltr;position:relative}
+#drag{flex:none;height:32px;line-height:32px;padding-left:12px;padding-right:8px;cursor:default}
+#drag2{flex:1;height:32px}
+button{width:44px;height:32px;border:0;background:transparent;color:#E0E0E0;font-size:13px;font-family:inherit;cursor:pointer}
+button:hover{background:#2A2A2D}
+button#close:hover{background:#D04040}
+button#seven{display:none;width:44px;height:22px;margin-right:4px;border-radius:5px;font-size:11px;font-weight:700;background:#7B2CBF;color:#fff}
+button#seven:hover{background:#9140D8}
+button#seven.on{display:block}
+.e{position:absolute;z-index:5}
+#eN{left:8px;right:8px;top:0;height:3px;cursor:ns-resize}
+#eW{left:0;top:8px;bottom:0;width:3px;cursor:ew-resize}
+#eE{right:0;top:8px;bottom:0;width:3px;cursor:ew-resize}
+#eNW{left:0;top:0;width:8px;height:8px;cursor:nwse-resize}
+#eNE{right:0;top:0;width:8px;height:8px;cursor:nesw-resize}
+</style></head><body>
+<div id="bar">
+  <div id="drag">/*TITLE*/AllChats Window</div>
+  <button id="seven">7TV</button>
+  <div id="drag2"></div>
+  <button id="min">&#8211;</button>
+  <button id="max">&#9633;</button>
+  <button id="close">&#10005;</button>
+  <div class="e" id="eN" data-d="N"></div>
+  <div class="e" id="eW" data-d="W"></div>
+  <div class="e" id="eE" data-d="E"></div>
+  <div class="e" id="eNW" data-d="NW"></div>
+  <div class="e" id="eNE" data-d="NE"></div>
+</div>
+<script>
+function send(o){window.ipc.postMessage(JSON.stringify(o));}
+['drag','drag2'].forEach(function(id){
+  var el=document.getElementById(id);
+  el.addEventListener('mousedown',function(e){if(e.button===0&&e.detail===1)send({op:'drag'});});
+  el.addEventListener('dblclick',function(){send({op:'max'});});
+});
+window.__seven=function(v){document.getElementById('seven').classList.toggle('on',!!v);};
+window.__seven(/*SEVEN*/false);
+document.getElementById('seven').onclick=function(){send({op:'seven'});};
+document.getElementById('min').onclick=function(){send({op:'min'});};
+document.getElementById('max').onclick=function(){send({op:'max'});};
+document.getElementById('close').onclick=function(){send({op:'close'});};
+Array.prototype.forEach.call(document.querySelectorAll('.e'),function(el){
+  el.addEventListener('mousedown',function(e){if(e.button===0){e.preventDefault();send({op:'resize',dir:el.getAttribute('data-d')});}});
+});
+</script></body></html>

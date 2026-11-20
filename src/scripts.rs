@@ -71,6 +71,20 @@ pub fn apply(hidden: &[Item], bgs: &[Item], fade: &[Item], fade_secs: u32, opaci
     )
 }
 
-pub fn emotes(json: &str) -> String {
-    format!("window.__ac7tv&&window.__ac7tv({})", json)
+pub fn emotes(json: &str, partial: bool) -> String {
+    format!("window.__ac7tv&&window.__ac7tv({},{})", json, partial)
+}
+
+const EDGES: &str = "(function(){if(window.__acEdges)return;window.__acEdges=1;function mk(d,css){var e=document.createElement('div');e.style.cssText='position:fixed;z-index:2147483646;'+css;e.addEventListener('mousedown',function(ev){if(ev.button===0){ev.preventDefault();window.ipc.postMessage(JSON.stringify({t:'wresize',dir:d}));}});document.documentElement.appendChild(e);}function go(){mk('W','left:0;top:0;bottom:8px;width:4px;cursor:ew-resize');mk('E','right:0;top:0;bottom:8px;width:4px;cursor:ew-resize');mk('S','left:8px;right:8px;bottom:0;height:4px;cursor:ns-resize');mk('SW','left:0;bottom:0;width:8px;height:8px;cursor:nesw-resize');mk('SE','right:0;bottom:0;width:8px;height:8px;cursor:nwse-resize');}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();})();";
+
+pub fn window() -> String {
+    format!("window.__ac7Bridge=true;\n{}\n{}", SEVEN, EDGES)
+}
+
+pub fn seven_cfg(on: bool) -> String {
+    format!("window.__ac7Config&&window.__ac7Config({})", flag(on))
+}
+
+pub fn seven_retry() -> &'static str {
+    "window.__ac7retry&&window.__ac7retry(true)"
 }
