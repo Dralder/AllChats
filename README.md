@@ -23,6 +23,7 @@ AllChats opens a chat page (Kick, Twitch, YouTube or any web page) as a transpar
 - Hide border mode
 - Custom, Kick and Twitch buttons: type just a username or a full link
 - Window mode: separate Custom, Kick and Twitch windows that can run at the same time
+- Save your own custom windows with their own URL and settings, as many as you want
 - 7TV emotes on Kick, Twitch and YouTube
 - 7TV emote menu in window mode for supported websites
 - Connection status text on the overlay
@@ -46,6 +47,7 @@ AllChats opens a chat page (Kick, Twitch, YouTube or any web page) as a transpar
 1. Switch to Window at the top.
 2. Pick Custom, Kick or Twitch and enter the URL or username.
 3. Click Start. Each type opens its own window, and you can run all three together.
+4. To save your own window, select Custom, enter a URL, click Add and give it a name. It appears as a new button with its own settings. Select it to change its URL, or click Remove to delete it.
 
 ## Requirements
 
@@ -82,6 +84,7 @@ Made by Dralder.  [KICK](https://kick.com/dralder)  [Telegram](https://t.me/dral
 - حالت پنهان کردن حاشیه
 - دکمه‌های Custom، Kick و Twitch: فقط نام کاربری یا لینک کامل را وارد کنید
 - حالت پنجره: پنجره‌های جداگانه Custom، Kick و Twitch که همزمان کار می‌کنند
+- پنجره‌های دلخواه خودتان را با آدرس و تنظیمات جداگانه ذخیره کنید، به هر تعداد که می‌خواهید
 - ایموت‌های 7TV در Kick، Twitch و YouTube
 - منوی ایموت 7TV در حالت پنجره برای وبسایت های پشتیبانی شده
 - نمایش وضعیت اتصال روی اورلی
@@ -105,6 +108,7 @@ Made by Dralder.  [KICK](https://kick.com/dralder)  [Telegram](https://t.me/dral
 1. بالای برنامه روی Window بزنید.
 2. Custom، Kick یا Twitch را انتخاب کنید و آدرس یا نام کاربری را وارد کنید.
 3. روی Start کلیک کنید. هر نوع پنجره جداگانه باز می‌شود و می‌توانید هر سه را همزمان اجرا کنید.
+4. برای ذخیره پنجره دلخواه، Custom را انتخاب کنید، آدرس را وارد کنید، روی Add بزنید و یک نام بدهید. به‌صورت یک دکمه جدید با تنظیمات جداگانه اضافه می‌شود. آن را انتخاب کنید تا آدرسش را تغییر دهید، یا روی Remove بزنید تا حذف شود.
 
 ## نیازمندی‌ها
 
