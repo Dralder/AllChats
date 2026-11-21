@@ -24,7 +24,7 @@ use wry::http::Request;
 use wry::{PageLoadEvent, WebContext, WebView, WebViewBuilder};
 
 use std::collections::{HashMap, HashSet};
-use store::{Geo, Item, Opt, Profile, Settings, Store, WinCfg};
+use store::{Geo, Item, Opt, Profile, Saved, Settings, Store, WinCfg};
 
 const UI_HTML: &str = include_str!("ui.html");
 const BAR_HTML: &str = include_str!("winbar.html");
@@ -261,7 +261,28 @@ fn build_link(kind: &str, url: &str, kick: &str, twitch: &str) -> Option<String>
 }
 
 fn link_for(c: &WinCfg, kind: &str) -> Option<String> {
+    if let Some(id) = kind.strip_prefix("c:") {
+        let u = c.saved.iter().find(|s| s.id == id)?.url.trim().to_string();
+        return if u.is_empty() { None } else { Some(norm(&u)) };
+    }
     build_link(kind, &c.url, &c.kick, &c.twitch)
+}
+
+fn kind_ok(c: &WinCfg, kind: &str) -> bool {
+    matches!(kind, "custom" | "kick" | "twitch")
+        || kind.strip_prefix("c:").map(|id| c.saved.iter().any(|s| s.id == id)).unwrap_or(false)
+}
+
+fn all_kinds(c: &WinCfg) -> Vec<String> {
+    let mut v: Vec<String> = vec!["custom".into(), "kick".into(), "twitch".into()];
+    for s in &c.saved {
+        v.push(format!("c:{}", s.id));
+    }
+    v
+}
+
+fn clean_name(s: &str) -> String {
+    s.chars().filter(|c| !matches!(c, '<' | '>' | '&' | '"' | '\\' | '\n' | '\r')).collect::<String>().trim().chars().take(24).collect()
 }
 
 fn prof_link(p: &Profile) -> Option<String> {
@@ -332,6 +353,7 @@ struct App {
     imgs: HashMap<String, String>,
     overlay_want: bool,
     booted: bool,
+    quitting: bool,
     img_wait: HashMap<String, Vec<String>>,
     typeq: HashMap<String, (String, Vec<String>, Instant, Instant)>,
     win_ctx: WebContext,
@@ -363,7 +385,7 @@ impl App {
 
         let mode = if settings.mode == "window" { "window".to_string() } else { "overlay".to_string() };
         let mut wcfg = settings.win.clone();
-        if !matches!(wcfg.kind.as_str(), "custom" | "kick" | "twitch") {
+        if !kind_ok(&wcfg, &wcfg.kind) {
             wcfg.kind = "custom".to_string();
         }
         let settings_overlay = settings.overlay_open.unwrap_or(mode != "window");
@@ -427,6 +449,7 @@ impl App {
             imgs: HashMap::new(),
             overlay_want: settings_overlay,
             booted: false,
+            quitting: false,
             img_wait: HashMap::new(),
             typeq: HashMap::new(),
             win_ctx,
@@ -452,7 +475,10 @@ impl App {
         let code = if self.lang.is_empty() { "en" } else { &self.lang };
         let map = lang::load(&self.store.root, code);
         let script = scripts::window();
-        let title = lang::text(&map, &format!("w.win.{}", kind));
+        let title = match kind.strip_prefix("c:") {
+            Some(id) => self.wcfg.saved.iter().find(|s| s.id == id).map(|s| s.name.clone()).unwrap_or_default(),
+            None => lang::text(&map, &format!("w.win.{}", kind)),
+        };
         let c = self.wcfg.clone();
         let g = win_geo(&c, kind);
         let mut wb = base_window()
@@ -597,6 +623,29 @@ impl App {
         }
     }
 
+    fn quit(&mut self) -> bool {
+        for k in self.wins.keys().cloned().collect::<Vec<String>>() {
+            if !self.wcfg.open.contains(&k) {
+                self.wcfg.open.push(k);
+            }
+        }
+        topmost::set_active(false);
+        self.persist();
+        self.quitting = true;
+        self.ctl.window.set_visible(false);
+        for w in self.wins.values() {
+            w.window.set_visible(false);
+        }
+        for w in [&self.overlay, &self.login, &self.preview, &self.help].into_iter().flatten() {
+            w.window.set_visible(false);
+        }
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(1500));
+            std::process::exit(0);
+        });
+        true
+    }
+
     fn close_win(&mut self, kind: &str) {
         self.wins.remove(kind);
         self.win_url.remove(kind);
@@ -661,7 +710,7 @@ impl App {
         }
         let saved = self.wcfg.open.clone();
         for k in saved {
-            if matches!(k.as_str(), "custom" | "kick" | "twitch") {
+            if kind_ok(&self.wcfg, &k) {
                 self.open_win(&k, t);
             }
         }
@@ -692,6 +741,9 @@ impl App {
     }
 
     fn persist(&self) {
+        if self.quitting {
+            return;
+        }
         self.store.save_profile(self.profile());
         self.save_settings();
     }
@@ -706,7 +758,9 @@ impl App {
             ctl_y: self.ctl_y,
             overlay_open: Some(self.overlay_want),
         };
-        self.store.save_settings(&s);
+        if !self.quitting {
+            self.store.save_settings(&s);
+        }
         s
     }
 
@@ -761,6 +815,7 @@ impl App {
                 "seven": win_opt(&self.wcfg, &self.wcfg.kind).seven,
                 "zoom": win_opt(&self.wcfg, &self.wcfg.kind).zoom,
                 "running": self.wins.contains_key(&self.wcfg.kind),
+                "saved": self.wcfg.saved.iter().map(|s| json!({ "id": s.id, "name": s.name, "url": s.url, "running": self.wins.contains_key(&format!("c:{}", s.id)) })).collect::<Vec<_>>(),
                 "link": win_link(&self.wcfg).unwrap_or_default()
             }
         })
@@ -1191,11 +1246,7 @@ impl App {
                 return false;
             }
             "close" => {
-                self.close_overlay();
-                self.wins.clear();
-                self.login = None;
-                self.persist();
-                return true;
+                return self.quit();
             }
             "select" => {
                 if let Some(n) = v["name"].as_str() {
@@ -1451,11 +1502,18 @@ impl App {
                 }
             }
             "wset" => {
-                let kinds = ["custom", "kick", "twitch"];
+                let kinds = all_kinds(&self.wcfg);
                 let before: Vec<Option<String>> = kinds.iter().map(|k| link_for(&self.wcfg, k)).collect();
                 if let Some(k) = v["kind"].as_str() {
-                    if kinds.contains(&k) {
+                    if kind_ok(&self.wcfg, k) {
                         self.wcfg.kind = k.to_string();
+                    }
+                }
+                if let Some(u) = v["surl"].as_str() {
+                    if let Some(id) = self.wcfg.kind.strip_prefix("c:").map(|x| x.to_string()) {
+                        if let Some(s) = self.wcfg.saved.iter_mut().find(|s| s.id == id) {
+                            s.url = u.trim().to_string();
+                        }
                     }
                 }
                 if let Some(u) = v["url"].as_str() {
@@ -1494,13 +1552,45 @@ impl App {
                 for (i, k) in kinds.iter().enumerate() {
                     let after = link_for(&self.wcfg, k);
                     if after != before[i] {
-                        if let (Some(w), Some(l)) = (self.wins.get(*k), &after) {
+                        if let (Some(w), Some(l)) = (self.wins.get(k.as_str()), &after) {
                             let _ = w.view.load_url(l);
                         }
                     }
                 }
                 self.sync_bars();
                 self.save_settings();
+            }
+            "wadd" => {
+                let name = clean_name(v["name"].as_str().unwrap_or(""));
+                let url = v["url"].as_str().unwrap_or("").trim().to_string();
+                let taken = self.wcfg.saved.iter().any(|s| s.name.to_lowercase() == name.to_lowercase());
+                if !name.is_empty() && !taken {
+                    let mut n = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis())
+                        .unwrap_or(0);
+                    while self.wcfg.saved.iter().any(|s| s.id == format!("{:x}", n)) {
+                        n += 1;
+                    }
+                    let id = format!("{:x}", n);
+                    self.wcfg.saved.push(Saved { id: id.clone(), name, url });
+                    self.wcfg.kind = format!("c:{}", id);
+                    self.save_settings();
+                }
+            }
+            "wdel" => {
+                let k = self.wcfg.kind.clone();
+                if let Some(id) = k.strip_prefix("c:") {
+                    self.wins.remove(&k);
+                    self.win_url.remove(&k);
+                    self.wcfg.open.retain(|x| *x != k);
+                    self.wcfg.geo.remove(&k);
+                    self.wcfg.opts.remove(&k);
+                    let id = id.to_string();
+                    self.wcfg.saved.retain(|s| s.id != id);
+                    self.wcfg.kind = "custom".to_string();
+                    self.save_settings();
+                }
             }
             "wstart" => {
                 if self.mode == "window" {
@@ -1763,10 +1853,7 @@ impl App {
         if id == self.ctl.window.id() {
             match ev {
                 WindowEvent::CloseRequested => {
-                    self.close_overlay();
-                    self.login = None;
-                    self.persist();
-                    return true;
+                    return self.quit();
                 }
                 WindowEvent::Moved(pos) => {
                     if pos.x > -10000 && pos.y > -10000 {

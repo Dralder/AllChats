@@ -108,5 +108,13 @@
   "w.emote.chan": "Channel emotes",
   "w.emote.glob": "Global emotes",
   "w.emote.noinput": "Chat box not found",
-  "w.emote.fail": "Could not paste the emote"
+  "w.emote.fail": "Could not paste the emote",
+  "w.add": "Add",
+  "w.remove": "Remove",
+  "w.add.title": "NEW WINDOW",
+  "w.add.msg": "Enter a name for this link",
+  "w.add.ok": "Save",
+  "w.del.title": "REMOVE WINDOW",
+  "w.del.msg": "Remove \"{name}\"?",
+  "w.del.ok": "Remove"
 }

@@ -141,6 +141,14 @@ impl Default for Opt {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct Saved {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct WinCfg {
@@ -157,6 +165,7 @@ pub struct WinCfg {
     pub geo: std::collections::HashMap<String, Geo>,
     pub open: Vec<String>,
     pub opts: std::collections::HashMap<String, Opt>,
+    pub saved: Vec<Saved>,
 }
 
 impl Default for WinCfg {
@@ -175,6 +184,7 @@ impl Default for WinCfg {
             geo: std::collections::HashMap::new(),
             open: Vec::new(),
             opts: std::collections::HashMap::new(),
+            saved: Vec::new(),
         }
     }
 }
@@ -227,6 +237,64 @@ fn safe_name(name: &str) -> String {
     } else {
         cleaned
     }
+}
+
+fn pick<T: serde::de::DeserializeOwned>(o: &serde_json::Map<String, serde_json::Value>, key: &str, dst: &mut T) {
+    if let Some(v) = o.get(key) {
+        if let Ok(x) = serde_json::from_value::<T>(v.clone()) {
+            *dst = x;
+        }
+    }
+}
+
+fn pick_map<T: serde::de::DeserializeOwned>(
+    o: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    dst: &mut std::collections::HashMap<String, T>,
+) {
+    if let Some(m) = o.get(key).and_then(|v| v.as_object()) {
+        for (k, v) in m {
+            if let Ok(x) = serde_json::from_value::<T>(v.clone()) {
+                dst.insert(k.clone(), x);
+            }
+        }
+    }
+}
+
+fn parse_settings(text: &str) -> Option<Settings> {
+    let v: serde_json::Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
+    let o = v.as_object()?;
+    let mut s = Settings::default();
+    pick(o, "last_profile", &mut s.last_profile);
+    pick(o, "lang", &mut s.lang);
+    pick(o, "mode", &mut s.mode);
+    pick(o, "ctl_x", &mut s.ctl_x);
+    pick(o, "ctl_y", &mut s.ctl_y);
+    pick(o, "overlay_open", &mut s.overlay_open);
+    if let Some(w) = o.get("win").and_then(|x| x.as_object()) {
+        let c = &mut s.win;
+        pick(w, "kind", &mut c.kind);
+        pick(w, "url", &mut c.url);
+        pick(w, "kick", &mut c.kick);
+        pick(w, "twitch", &mut c.twitch);
+        pick(w, "topmost", &mut c.topmost);
+        pick(w, "seven", &mut c.seven);
+        pick(w, "x", &mut c.x);
+        pick(w, "y", &mut c.y);
+        pick(w, "w", &mut c.w);
+        pick(w, "h", &mut c.h);
+        pick(w, "open", &mut c.open);
+        pick_map(w, "geo", &mut c.geo);
+        pick_map(w, "opts", &mut c.opts);
+        if let Some(a) = w.get("saved").and_then(|x| x.as_array()) {
+            for item in a {
+                if let Ok(x) = serde_json::from_value::<Saved>(item.clone()) {
+                    c.saved.push(x);
+                }
+            }
+        }
+    }
+    Some(s)
 }
 
 fn write_atomic(path: &PathBuf, data: &str) {
@@ -299,15 +367,30 @@ impl Store {
     }
 
     pub fn load_settings(&self) -> Settings {
-        fs::read_to_string(self.settings_path())
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+        let path = self.settings_path();
+        if let Ok(text) = fs::read_to_string(&path) {
+            if let Some(s) = parse_settings(&text) {
+                return s;
+            }
+            let _ = fs::copy(&path, path.with_extension("corrupt"));
+        }
+        if let Ok(text) = fs::read_to_string(path.with_extension("bak")) {
+            if let Some(s) = parse_settings(&text) {
+                return s;
+            }
+        }
+        Settings::default()
     }
 
     pub fn save_settings(&self, settings: &Settings) {
         if let Ok(s) = serde_json::to_string_pretty(settings) {
-            write_atomic(&self.settings_path(), &s);
+            let path = self.settings_path();
+            if let Ok(old) = fs::read_to_string(&path) {
+                if parse_settings(&old).is_some() {
+                    let _ = fs::copy(&path, path.with_extension("bak"));
+                }
+            }
+            write_atomic(&path, &s);
         }
     }
 
@@ -320,7 +403,11 @@ impl Store {
                     continue;
                 }
                 if let Ok(text) = fs::read_to_string(&path) {
-                    if let Ok(mut p) = serde_json::from_str::<Profile>(&text) {
+                    let parsed = serde_json::from_str::<Profile>(&text);
+                    if parsed.is_err() {
+                        let _ = fs::copy(&path, path.with_extension("bad"));
+                    }
+                    if let Ok(mut p) = parsed {
                         if p.name.trim().is_empty() {
                             p.name = path
                                 .file_stem()

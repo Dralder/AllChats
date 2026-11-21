@@ -85,6 +85,8 @@ button.b.seg:hover { background: #2A2A2D; }
 button.b.seg.on { background: #7B2CBF; border-color: #7B2CBF; color: #fff; }
 body.fa #wInput { direction: ltr; text-align: left; }
 body.fa #pgWin .row { direction: ltr; }
+.kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; direction: ltr; }
+.kinds button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -160,12 +162,14 @@ body.fa #pgWin .row { direction: ltr; }
 <div id="pgWin" class="hidden">
   <div class="card">
     <div class="label" data-i="w.title">WINDOW</div>
-    <div class="row">
+    <div class="kinds" id="wKinds">
       <button class="b seg" id="wkCustom" data-i="w.custom">Custom</button>
       <button class="b seg" id="wkKick" data-i="w.kick">Kick</button>
       <button class="b seg" id="wkTwitch" data-i="w.twitch">Twitch</button>
     </div>
     <input type="text" id="wInput" spellcheck="false" placeholder="https://...">
+    <button class="b hidden" id="wAdd" data-i="w.add">Add</button>
+    <button class="b danger hidden" id="wRemove" data-i="w.remove">Remove</button>
     <label class="check"><input type="checkbox" id="wSeven"><span data-i="opt.seven">7TV emotes</span></label>
     <label class="check"><input type="checkbox" id="wTop"><span data-i="w.topmost">Always on top</span></label>
     <div class="row" style="align-items:center;gap:8px"><span data-i="w.zoom" style="font-size:12px">Zoom</span><input type="range" id="wZoom" min="50" max="200" step="5" value="100" style="flex:1"><span id="wZoomV" style="font-size:12px;min-width:36px;text-align:right">100%</span></div>
@@ -173,7 +177,7 @@ body.fa #pgWin .row { direction: ltr; }
   </div>
   <button class="b main" id="wToggle">Start</button>
 </div>
-  <div id="foot"><span data-i="foot">Made by</span> <span>Dralder</span> v1.2.0</div>
+  <div id="foot"><span data-i="foot">Made by</span> <span>Dralder</span> v1.2.1</div>
 </div>
 <div id="updDialog" style="position:fixed;top:32px;left:0;right:0;bottom:0;background:rgba(32,32,32,0.88);display:none;align-items:center;justify-content:center;z-index:9999">
   <div style="background:#2A2A2D;border:1px solid #575757;border-radius:10px;padding:16px;width:300px;color:#E0E0E0;text-align:center">
@@ -205,6 +209,8 @@ var state = { overlay: false, preview: false, bgs: [], cands: [], profiles: [], 
 var shownTag = null;
 var updState = 'ask';
 var dlgCb = null;
+var dlgPool = null;
+var kindSig = null;
 var dupTimer = null;
 var T = {};
 function t(k, v) { var s = T[k]; if (s === undefined) return k; if (v) { for (var x in v) s = s.split('{' + x + '}').join(v[x]); } return s; }
@@ -226,6 +232,7 @@ window.setLang = function (code, dict) {
 function dlgClose() {
 $('dlg').style.display = 'none';
 dlgCb = null;
+dlgPool = null;
 }
 function dlgOpen(o) {
 $('dlgTitle').textContent = o.title;
@@ -239,6 +246,7 @@ var ok = $('dlgOk');
 ok.textContent = o.ok;
 ok.className = o.danger ? 'b danger' : 'b';
 dlgCb = o.cb;
+dlgPool = o.pool || null;
 $('dlg').style.display = 'flex';
 if (o.input) {
 inp.focus();
@@ -260,7 +268,7 @@ if (!n) {
 $('dlgErr').textContent = t('dlg.err.empty');
 return;
 }
-if (state.profiles.some(function (p) { return p.toLowerCase() === low; })) {
+if ((dlgPool || state.profiles).some(function (p) { return p.toLowerCase() === low; })) {
 $('dlgErr').textContent = t('dlg.err.used');
 return;
 }
@@ -538,17 +546,38 @@ function renderWin(s) {
   $('pgWin').classList.toggle('hidden', !isWin);
   $('mdOv').classList.toggle('on', !isWin);
   $('mdWin').classList.toggle('on', isWin);
+  var saved = w.saved || [];
+  var sig = saved.map(function (x) { return x.id + ':' + x.name; }).join('|');
+  if (sig !== kindSig) {
+    kindSig = sig;
+    var box = $('wKinds');
+    box.querySelectorAll('.sv').forEach(function (n) { n.remove(); });
+    saved.forEach(function (x) {
+      var b = document.createElement('button');
+      b.className = 'b seg sv';
+      b.setAttribute('data-id', 'c:' + x.id);
+      b.textContent = x.name;
+      b.title = x.name;
+      b.onclick = function () { send({ cmd: 'wset', kind: 'c:' + x.id }); };
+      box.appendChild(b);
+    });
+  }
   $('wkCustom').classList.toggle('on', w.kind === 'custom');
   $('wkKick').classList.toggle('on', w.kind === 'kick');
   $('wkTwitch').classList.toggle('on', w.kind === 'twitch');
+  $('wKinds').querySelectorAll('.sv').forEach(function (n) { n.classList.toggle('on', n.getAttribute('data-id') === w.kind); });
+  var isSaved = w.kind.indexOf('c:') === 0;
+  var cur = isSaved ? saved.filter(function (x) { return 'c:' + x.id === w.kind; })[0] : null;
   var inp = $('wInput');
-  inp.placeholder = t(w.kind === 'custom' ? 'w.url.ph' : 'w.user.ph');
-  if (document.activeElement !== inp) inp.value = w.kind === 'custom' ? w.url : (w.kind === 'kick' ? w.kick : w.twitch);
+  inp.placeholder = t(w.kind === 'kick' || w.kind === 'twitch' ? 'w.user.ph' : 'w.url.ph');
+  if (document.activeElement !== inp) inp.value = isSaved ? (cur ? cur.url : '') : (w.kind === 'custom' ? w.url : (w.kind === 'kick' ? w.kick : w.twitch));
+  $('wAdd').classList.toggle('hidden', w.kind !== 'custom');
+  $('wRemove').classList.toggle('hidden', !isSaved);
   $('wTop').checked = !!w.topmost;
   $('wSeven').checked = !!w.seven;
   if (document.activeElement !== $('wZoom')) { var zp = Math.round((w.zoom || 1) * 100); $('wZoom').value = zp; $('wZoomV').textContent = zp + '%'; }
   var lg = $('wLogin');
-  lg.classList.toggle('hidden', w.kind === 'custom');
+  lg.classList.toggle('hidden', w.kind !== 'kick' && w.kind !== 'twitch');
   lg.textContent = t(w.kind === 'twitch' ? 'w.login.twitch' : 'w.login.kick');
   $('wToggle').textContent = t(w.running ? 'w.stop' : 'w.start');
   $('wToggle').className = w.running ? 'b main danger' : 'b main';
@@ -559,7 +588,7 @@ function renderWin(s) {
 function wField() {
   var k = state.w.kind;
   var o = { cmd: 'wset' };
-  o[k === 'custom' ? 'url' : k] = $('wInput').value;
+  o[k === 'custom' ? 'url' : (k === 'kick' || k === 'twitch' ? k : 'surl')] = $('wInput').value;
   return o;
 }
 
@@ -575,6 +604,28 @@ $('wInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') { 
 $('wTop').onchange = function () { send({ cmd: 'wset', topmost: this.checked }); };
 $('wZoom').oninput = function () { $('wZoomV').textContent = this.value + '%'; send({ cmd: 'wset', zoom: this.value / 100 }); };
 $('wSeven').onchange = function () { send({ cmd: 'wset', seven: this.checked }); };
+$('wAdd').onclick = function () {
+  dlgOpen({
+    title: t('w.add.title'),
+    msg: t('w.add.msg'),
+    input: true,
+    def: '',
+    ok: t('w.add.ok'),
+    pool: (state.w.saved || []).map(function (x) { return x.name; }),
+    cb: function (n) { send({ cmd: 'wadd', name: n, url: $('wInput').value }); }
+  });
+};
+$('wRemove').onclick = function () {
+  var cur = (state.w.saved || []).filter(function (x) { return 'c:' + x.id === state.w.kind; })[0];
+  if (!cur) return;
+  dlgOpen({
+    title: t('w.del.title'),
+    msg: t('w.del.msg', { name: cur.name }),
+    ok: t('w.del.ok'),
+    danger: true,
+    cb: function () { send({ cmd: 'wdel' }); }
+  });
+};
 $('wLogin').onclick = function () { send({ cmd: 'wlogin' }); };
 $('wToggle').onclick = function () {
   if (!state.w.running) send(wField());
