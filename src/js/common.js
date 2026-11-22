@@ -55,52 +55,92 @@
     return n.slice(0, 60);
   };
 
-  U.rowOf = function (el) {
+  U.isBox = function (el) {
+    if (!el || el.nodeType !== 1) return true;
+    if (el === document.body || el === document.documentElement) return true;
+    if (el.querySelector('textarea,input,select,[contenteditable]:not([contenteditable="false"])')) return true;
+    var cs = getComputedStyle(el);
+    if (cs.overflowY === 'auto' || cs.overflowY === 'scroll') return true;
+    return el.getBoundingClientRect().height > window.innerHeight * 0.5;
+  };
+
+  function classesOf(el, max) {
     var skipCls = /^(active|selected|hover|focus|highlight|highlighted|new|odd|even|first|last|read|unread|pinned|deleted|hidden|visible|show|open|closed)$/i;
-    var best = null;
+    return Array.prototype.filter.call(el.classList, function (c) {
+      return !/\d{3,}/.test(c) && !skipCls.test(c) && /^[a-zA-Z_-][a-zA-Z0-9_-]*$/.test(c);
+    }).slice(0, max);
+  }
+
+  function lowestBlock(el) {
     var cur = el;
     while (cur && cur.nodeType === 1 && cur !== document.body && cur !== document.documentElement) {
-      var p = cur.parentElement;
-      if (!p) break;
-      var node = cur;
-      var same = Array.prototype.filter.call(p.children, function (x) { return x.tagName === node.tagName; });
-      var pw = p.getBoundingClientRect().width;
-      var cw = cur.getBoundingClientRect().width;
-      var narrow = pw > 0 && cw < pw * 0.6 && getComputedStyle(cur).display !== 'inline';
-      if (same.length >= 2 && !narrow) {
-        var cls = Array.prototype.filter.call(cur.classList, function (c) {
-          if (/\d{3,}/.test(c) || skipCls.test(c)) return false;
-          var n = 0;
-          for (var i = 0; i < same.length; i++) if (same[i].classList.contains(c)) n++;
-          return n >= same.length * 0.8;
-        }).slice(0, 4);
-        var members = same.filter(function (x) {
-          return cls.every(function (c) { return x.classList.contains(c); });
-        });
-        var attr = '';
-        if (!cls.length) {
-          var names = Array.prototype.map.call(cur.attributes, function (a) { return a.name; }).filter(function (n) {
-            return n.indexOf('data-') === 0 && members.every(function (m) { return m.hasAttribute(n); });
-          });
-          if (names.length) attr = '[' + names[0] + ']';
-        }
-        if (members.length >= 2 && (!best || members.length >= best.count)) {
-          best = { el: cur, cls: cls, attr: attr, count: members.length, parent: p };
-        }
-      }
-      cur = p;
+      var d = getComputedStyle(cur).display;
+      if (d !== 'inline' && d !== 'contents' && d !== 'inline-block' && d !== 'ruby' && d !== 'inline-flex') return cur;
+      cur = cur.parentElement;
     }
-    if (!best) return { el: el, sel: U.pathOf(el), count: 1 };
-    var part = best.el.tagName.toLowerCase() + best.cls.map(function (c) { return '.' + esc(c); }).join('') + best.attr;
-    var pp = U.pathOf(best.parent);
-    var full = (pp ? pp + ' > ' : '') + part;
-    var found = [];
-    try { found = document.querySelectorAll(full); } catch (e) {}
-    if (Array.prototype.indexOf.call(found, best.el) < 0) {
-      full = U.pathOf(best.el);
-      found = [best.el];
+    return el;
+  }
+
+  function validSel(sel, row) {
+    var found;
+    try { found = document.querySelectorAll(sel); } catch (e) { return 0; }
+    if (!found.length || Array.prototype.indexOf.call(found, row) < 0) return 0;
+    for (var i = 0; i < found.length; i++) {
+      if (U.isBox(found[i])) return 0;
     }
-    return { el: best.el, sel: full, count: found.length };
+    return found.length;
+  }
+
+  U.rowOf = function (el) {
+    var row = lowestBlock(el);
+    for (var c = el; c && c !== document.body && !U.isBox(c); c = c.parentElement) {
+      if (c.tagName.indexOf('-') > 0) row = c;
+    }
+    if (U.isBox(row)) row = el;
+    for (var guard = 0; guard < 6; guard++) {
+      var p = row.parentElement;
+      if (!p || U.isBox(p) || p.children.length !== 1 || !p.className || typeof p.className !== 'string') break;
+      var g = p.parentElement;
+      if (!g) break;
+      var sibs = Array.prototype.filter.call(g.children, function (x) { return x !== p && x.className === p.className; });
+      if (!sibs.length) break;
+      row = p;
+    }
+    var tag = row.tagName.toLowerCase();
+    var same = row.parentElement ? Array.prototype.filter.call(row.parentElement.children, function (x) { return x.tagName === row.tagName; }) : [row];
+    var cls = classesOf(row, 4);
+    if (same.length >= 2) {
+      var shared = cls.filter(function (c) {
+        var n = 0;
+        for (var i = 0; i < same.length; i++) if (same[i].classList.contains(c)) n++;
+        return n >= same.length * 0.8;
+      });
+      if (shared.length) cls = shared;
+    }
+    var attr = '';
+    if (!cls.length) {
+      var names = Array.prototype.map.call(row.attributes, function (a) { return a.name; }).filter(function (n) {
+        return n.indexOf('data-') === 0 && /^[a-z0-9-]+$/.test(n);
+      });
+      if (names.length) attr = '[' + names[0] + ']';
+    }
+    var own = tag + cls.map(function (c) { return '.' + esc(c); }).join('') + attr;
+    var specific = cls.length > 0 || attr !== '' || tag.indexOf('-') > 0;
+    var cands = [];
+    if (specific) cands.push(own);
+    var par = row.parentElement;
+    if (par && par !== document.body) {
+      var pc = classesOf(par, 3);
+      var ps = par.id && unique('#' + esc(par.id)) ? '#' + esc(par.id) : par.tagName.toLowerCase() + pc.map(function (c) { return '.' + esc(c); }).join('');
+      cands.push(ps + ' > ' + own);
+      var pp = U.pathOf(par);
+      if (pp) cands.push(pp + ' > ' + own);
+    }
+    for (var k = 0; k < cands.length; k++) {
+      var n2 = validSel(cands[k], row);
+      if (n2) return { el: row, sel: cands[k], count: n2 };
+    }
+    return { el: row, sel: U.pathOf(row), count: 1 };
   };
 
   U.hasBg = function (el) {

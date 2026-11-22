@@ -88,3 +88,7 @@ pub fn seven_cfg(on: bool) -> String {
 pub fn seven_retry() -> &'static str {
     "window.__ac7retry&&window.__ac7retry(true)"
 }
+
+pub fn kick_probe() -> &'static str {
+    "(function(){var h=location.hostname;function send(t,s,u){try{window.ipc.postMessage(JSON.stringify({t:t,s:s,u:u||''}));}catch(e){}}if(h.indexOf('twitch.tv')>=0){var ok=false,nm='';try{var m=document.cookie.match(/(?:^|; )twilight-user=([^;]*)/);if(m){var j=JSON.parse(decodeURIComponent(m[1]));if(j&&j.login){ok=true;nm=String(j.login);}}}catch(e){}if(!ok&&/(?:^|; )auth-token=/.test(document.cookie))ok=true;send('tuser',ok?'in':'out',nm);return;}if(h.indexOf('kick.com')<0||window.__kp)return;var busy=false;window.__kp=function(){if(busy)return;busy=true;var hd={Accept:'application/json'};try{var m=document.cookie.match(/(?:^|; )session_token=([^;]*)/);if(m)hd.Authorization='Bearer '+decodeURIComponent(m[1]);}catch(e){}fetch('/api/v1/user',{credentials:'include',headers:hd}).then(function(r){if(r.status===401){send('kuser','out');return null;}if(!r.ok){send('kuser','err');return null;}return r.json();}).then(function(j){if(!j)return;var n=(j.streamer_channel&&j.streamer_channel.slug)||(j.username?String(j.username).toLowerCase().replace(/_/g,'-'):'');if(n)send('kuser','in',n);else send('kuser','out');}).catch(function(){send('kuser','err');}).then(function(){busy=false;});};window.__kp();})();"
+}

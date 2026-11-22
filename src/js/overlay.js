@@ -88,16 +88,23 @@
     }
     fadeArm();
   }
+  function fadeBad(el) {
+    if (el === document.body || el === document.documentElement) return true;
+    if (el.querySelector('textarea,input,select,[contenteditable]:not([contenteditable="false"])')) return true;
+    return el.getBoundingClientRect().height > window.innerHeight * 0.6;
+  }
   function fadeReg(el) {
     if (fadeSeen.has(el)) return;
     fadeSeen.add(el);
+    if (fadeBad(el)) return;
     var now = performance.now();
     var due = now + fadeSecs * 1000;
     var k = fadeKeyOf(el);
+    var id5 = k.charAt(0) !== '|';
     if (k) {
       var e = fadeKeys.get(k);
       var prev = e && e.ref ? e.ref.deref() : null;
-      if (e && now < e.due + 5000 && !(prev && prev !== el && prev.isConnected)) {
+      if (e && now < e.due + (id5 ? 5000 : 0) && !(prev && prev !== el && prev.isConnected)) {
         due = e.due;
         e.ref = new WeakRef(el);
       } else {

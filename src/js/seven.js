@@ -355,7 +355,34 @@
       var nx = str.charAt(off + m.length);
       var post = nx && !/\s/.test(nx) ? ' ' : '';
       return pre + n + post;
-    }).replace(/\u00a0/g, ' ');
+    }).replace(/\u00a0/g, ' ').replace(/\ufeff/g, '');
+  }
+
+  function lastText(el) {
+    var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    var n = null;
+    while (w.nextNode()) n = w.currentNode;
+    return n;
+  }
+
+  function caretToEnd(sel, el) {
+    var n = lastText(el);
+    var r = document.createRange();
+    if (n) r.setStart(n, n.nodeValue.length);
+    else r.selectNodeContents(el);
+    r.collapse(n ? true : false);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+
+  function selectAllIn(el) {
+    var sel = window.getSelection();
+    el.focus();
+    var ok = false;
+    try { ok = document.execCommand('selectAll'); } catch (e) {}
+    if (!ok || !sel || !sel.rangeCount || !el.contains(sel.anchorNode)) {
+      if (sel) sel.selectAllChildren(el);
+    }
   }
 
   function offsetRange(el, a, b) {
@@ -375,9 +402,7 @@
 
   function sendAct(el, act) {
     var text = expandText(el.textContent || '');
-    var sel = window.getSelection();
-    el.focus();
-    if (sel) sel.selectAllChildren(el);
+    selectAllIn(el);
     if (!text.trim()) {
       document.execCommand('delete');
       queueStrip();
@@ -413,7 +438,10 @@
     if (!btn) return;
     var c = el;
     for (var i = 0; i < 5 && c.parentElement; i++) c = c.parentElement;
-    if (!c.contains(btn) || btn.contains(el)) return;
+    var known = document.querySelector('[data-a-target="chat-send-button"]');
+    if (known) {
+      if (!btn.matches('[data-a-target="chat-send-button"]')) return;
+    } else if (!c.contains(btn) || btn.contains(el)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     pendingBtn = btn;
@@ -583,10 +611,45 @@
     }
     var rg = offsetRange(el, start, idx);
     if (!rg) return;
+    if (bsBusy) return;
     e.preventDefault();
     e.stopPropagation();
-    if (bsBusy) return;
     bsBusy = true;
+    var slate = el.hasAttribute('data-slate-editor');
+    if (slate) {
+      var target = idx - start;
+      var guard = 0;
+      var beforeLen = function () {
+        var s2 = window.getSelection();
+        if (!s2 || !s2.rangeCount || !el.contains(s2.anchorNode)) return -1;
+        var r2 = document.createRange();
+        r2.selectNodeContents(el);
+        r2.setEnd(s2.anchorNode, s2.anchorOffset);
+        return r2.toString().replace(/\ufeff/g, '').length;
+      };
+      var startLen = before.replace(/\ufeff/g, '').length;
+      var step = function () {
+        var cur = beforeLen();
+        if (cur <= 0 || startLen - cur >= target || guard++ > 12) {
+          bsBusy = false;
+          queueStrip();
+          return;
+        }
+        try { window.ipc.postMessage(JSON.stringify({ t: '7tv_key', key: 'backspace' })); } catch (er) {}
+        var waited = 0;
+        var wait = function () {
+          setTimeout(function () {
+            var now = beforeLen();
+            if (now !== cur) step();
+            else if (waited >= 200) { bsBusy = false; queueStrip(); }
+            else { waited += 10; wait(); }
+          }, 10);
+        };
+        wait();
+      };
+      setTimeout(step, 20);
+      return;
+    }
     var want = before.slice(start, idx);
     sel.removeAllRanges();
     sel.addRange(rg);
@@ -667,11 +730,7 @@
     var sel = window.getSelection();
     if (!sel) return;
     if (sel.rangeCount && el.contains(sel.anchorNode) && sel.anchorNode !== el) return;
-    var r = document.createRange();
-    r.selectNodeContents(el);
-    r.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(r);
+    caretToEnd(sel, el);
   }
 
   window.__ac7Prepare = function (name) {
@@ -682,7 +741,7 @@
       had = document.activeElement === el;
     } else {
       var sel = window.getSelection();
-      had = !!(sel && sel.rangeCount && el.contains(sel.anchorNode));
+      had = !!(sel && sel.rangeCount && el.contains(sel.anchorNode) && (sel.anchorNode.nodeType === 3 || !lastText(el)));
     }
     el.focus();
     if (!had) {
@@ -690,12 +749,7 @@
         var n = el.value.length;
         try { el.setSelectionRange(n, n); } catch (e) {}
       } else {
-        var s2 = window.getSelection();
-        var r = document.createRange();
-        r.selectNodeContents(el);
-        r.collapse(false);
-        s2.removeAllRanges();
-        s2.addRange(r);
+        caretToEnd(window.getSelection(), el);
       }
     }
     if (name && on && map && HL && el.isContentEditable && has(name)) {

@@ -83,9 +83,22 @@ body.fa #foot { direction: rtl; }
 button.b.seg { flex: 1; background: #202020; border: 1px solid #575757; color: #8A8A8A; }
 button.b.seg:hover { background: #2A2A2D; }
 button.b.seg.on { background: #7B2CBF; border-color: #7B2CBF; color: #fff; }
+button.b.seg.kc.on, .tabs button.kc.on, button.b.sub.on { background: #53FC18; border-color: #53FC18; color: #0B0E0F; }
 body.fa #wInput { direction: ltr; text-align: left; }
 body.fa #pgWin .row { direction: ltr; }
-.kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; direction: ltr; }
+.sep { height: 1px; margin: 4px 6px; opacity: 0.7; background: linear-gradient(90deg, transparent, #5A5A5A 18%, #686868 50%, #5A5A5A 82%, transparent); flex: none; }
+.kinds { display: flex; flex-wrap: wrap; gap: 6px; direction: ltr; }
+.kinds button.b.seg { flex: 1 1 calc((100% - 13px) / 3); }
+.subs { display: flex; flex-wrap: wrap; gap: 4px; direction: ltr; }
+#wSubs { flex-direction: column; flex-wrap: nowrap; }
+#wSubs.tw button.b.sub.on { background: #7B2CBF; border-color: #7B2CBF; color: #fff; }
+#wSubs.tw button.b.sub.run:not(.on) { box-shadow: inset 0 0 0 2px #A78BFA; }
+button.b.sub.big { flex: none; width: 100%; height: 32px; font-size: 13px; }
+.run:not(.on) { box-shadow: inset 0 0 0 2px #A78BFA; }
+button.kc.run:not(.on), button.b.sub.run:not(.on) { box-shadow: inset 0 0 0 2px #53FC18; }
+button.b.sub { flex: 1 1 auto; height: 26px; padding: 0 8px; font-size: 11px; background: #202020; border: 1px solid #575757; color: #8A8A8A; white-space: nowrap; }
+button.b.sub:hover { background: #2A2A2D; }
+button.b.sub.on { background: #53FC18; border-color: #53FC18; color: #0B0E0F; }
 .kinds button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 </head>
@@ -126,7 +139,7 @@ body.fa #pgWin .row { direction: ltr; }
   <div class="card">
     <div class="tabs">
       <button id="okCustom" data-i="w.custom">Custom</button>
-      <button id="okKick" data-i="w.kick">Kick</button>
+      <button id="okKick" class="kc" data-i="w.kick">Kick</button>
       <button id="okTwitch" data-i="w.twitch">Twitch</button>
     </div>
     <input type="text" id="url" spellcheck="false" data-i-ph="page.ph" placeholder="https://...">
@@ -164,10 +177,12 @@ body.fa #pgWin .row { direction: ltr; }
     <div class="label" data-i="w.title">WINDOW</div>
     <div class="kinds" id="wKinds">
       <button class="b seg" id="wkCustom" data-i="w.custom">Custom</button>
-      <button class="b seg" id="wkKick" data-i="w.kick">Kick</button>
+      <button class="b seg kc" id="wkKick" data-i="w.kick">Kick</button>
       <button class="b seg" id="wkTwitch" data-i="w.twitch">Twitch</button>
     </div>
+    <div class="sep"></div>
     <input type="text" id="wInput" spellcheck="false" placeholder="https://...">
+    <div class="subs hidden" id="wSubs"><button class="b sub big" id="wsChat" data-k="kick" data-i="w.sub.chat">Chat</button><div class="subs" id="wSubsMore"></div></div>
     <button class="b hidden" id="wAdd" data-i="w.add">Add</button>
     <button class="b danger hidden" id="wRemove" data-i="w.remove">Remove</button>
     <label class="check"><input type="checkbox" id="wSeven"><span data-i="opt.seven">7TV emotes</span></label>
@@ -177,7 +192,7 @@ body.fa #pgWin .row { direction: ltr; }
   </div>
   <button class="b main" id="wToggle">Start</button>
 </div>
-  <div id="foot"><span data-i="foot">Made by</span> <span>Dralder</span> v1.2.1</div>
+  <div id="foot"><span data-i="foot">Made by</span> <span>Dralder</span> v1.2.2</div>
 </div>
 <div id="updDialog" style="position:fixed;top:32px;left:0;right:0;bottom:0;background:rgba(32,32,32,0.88);display:none;align-items:center;justify-content:center;z-index:9999">
   <div style="background:#2A2A2D;border:1px solid #575757;border-radius:10px;padding:16px;width:300px;color:#E0E0E0;text-align:center">
@@ -211,6 +226,11 @@ var updState = 'ask';
 var dlgCb = null;
 var dlgPool = null;
 var kindSig = null;
+var SUBS = {
+  kick: [['kick:activity', 'w.sub.activity'], ['kick:actions', 'w.sub.actions'], ['kick:points', 'w.sub.points'], ['kick:mods', 'w.sub.mods'], ['kick:rewards', 'w.sub.rewards'], ['kick:session', 'w.sub.session'], ['kick:stream', 'w.sub.stream']],
+  twitch: [['twitch:activity', 'w.sub.activity'], ['twitch:mods', 'w.sub.mods'], ['twitch:health', 'w.sub.health'], ['twitch:info', 'w.sub.stream']]
+};
+var subSite = '';
 var dupTimer = null;
 var T = {};
 function t(k, v) { var s = T[k]; if (s === undefined) return k; if (v) { for (var x in v) s = s.split('{' + x + '}').join(v[x]); } return s; }
@@ -563,31 +583,64 @@ function renderWin(s) {
     });
   }
   $('wkCustom').classList.toggle('on', w.kind === 'custom');
-  $('wkKick').classList.toggle('on', w.kind === 'kick');
-  $('wkTwitch').classList.toggle('on', w.kind === 'twitch');
+  var site = w.kind.indexOf('kick') === 0 ? 'kick' : (w.kind.indexOf('twitch') === 0 ? 'twitch' : '');
+  var isSub = w.kind.indexOf(':') > 0 && w.kind.indexOf('c:') !== 0;
+  var siteOn = site === 'kick' ? !!w.kick_on : !!w.tw_on;
+  $('wkKick').classList.toggle('on', site === 'kick');
+  $('wkTwitch').classList.toggle('on', site === 'twitch');
   $('wKinds').querySelectorAll('.sv').forEach(function (n) { n.classList.toggle('on', n.getAttribute('data-id') === w.kind); });
+  var subBox = $('wSubs');
+  var more = $('wSubsMore');
+  if (site && subSite !== site) {
+    subSite = site;
+    more.innerHTML = '';
+    $('wsChat').setAttribute('data-k', site);
+    SUBS[site].forEach(function (x) {
+      var b = document.createElement('button');
+      b.className = 'b sub';
+      b.setAttribute('data-k', x[0]);
+      b.setAttribute('data-i', x[1]);
+      b.textContent = t(x[1]);
+      b.onclick = function () { send({ cmd: 'wset', kind: x[0] }); };
+      more.appendChild(b);
+    });
+  }
+  subBox.classList.toggle('hidden', !site);
+  subBox.classList.toggle('tw', site === 'twitch');
+  more.classList.toggle('hidden', !siteOn);
+  subBox.querySelectorAll('.sub').forEach(function (n) { n.classList.toggle('on', n.getAttribute('data-k') === w.kind); });
+  var runs = w.runs || [];
+  function isRun(k) { return runs.indexOf(k) >= 0; }
+  $('wkCustom').classList.toggle('run', isRun('custom'));
+  $('wkTwitch').classList.toggle('run', runs.some(function (k) { return k === 'twitch' || k.indexOf('twitch:') === 0; }));
+  $('wkKick').classList.toggle('run', runs.some(function (k) { return k === 'kick' || k.indexOf('kick:') === 0; }));
+  $('wKinds').querySelectorAll('.sv').forEach(function (n) { n.classList.toggle('run', isRun(n.getAttribute('data-id'))); });
+  subBox.querySelectorAll('.sub').forEach(function (n) { n.classList.toggle('run', isRun(n.getAttribute('data-k'))); });
   var isSaved = w.kind.indexOf('c:') === 0;
   var cur = isSaved ? saved.filter(function (x) { return 'c:' + x.id === w.kind; })[0] : null;
   var inp = $('wInput');
   inp.placeholder = t(w.kind === 'kick' || w.kind === 'twitch' ? 'w.user.ph' : 'w.url.ph');
   if (document.activeElement !== inp) inp.value = isSaved ? (cur ? cur.url : '') : (w.kind === 'custom' ? w.url : (w.kind === 'kick' ? w.kick : w.twitch));
+  inp.classList.toggle('hidden', isSub);
   $('wAdd').classList.toggle('hidden', w.kind !== 'custom');
   $('wRemove').classList.toggle('hidden', !isSaved);
   $('wTop').checked = !!w.topmost;
   $('wSeven').checked = !!w.seven;
   if (document.activeElement !== $('wZoom')) { var zp = Math.round((w.zoom || 1) * 100); $('wZoom').value = zp; $('wZoomV').textContent = zp + '%'; }
   var lg = $('wLogin');
-  lg.classList.toggle('hidden', w.kind !== 'kick' && w.kind !== 'twitch');
-  lg.textContent = t(w.kind === 'twitch' ? 'w.login.twitch' : 'w.login.kick');
-  $('wToggle').textContent = t(w.running ? 'w.stop' : 'w.start');
+  lg.classList.toggle('hidden', !(site && !siteOn));
+  lg.textContent = t(site === 'twitch' ? 'w.login.twitch' : 'w.login.kick');
+  var needLogin = isSub && !siteOn && !w.running;
+  $('wToggle').textContent = t(w.running ? 'w.stop' : (needLogin ? 'w.needlogin' : 'w.start'));
   $('wToggle').className = w.running ? 'b main danger' : 'b main';
-  $('wToggle').disabled = !w.link && !w.running;
+  $('wToggle').disabled = (!w.link && !w.running) || needLogin;
   fitWin();
 }
 
 function wField() {
   var k = state.w.kind;
   var o = { cmd: 'wset' };
+  if (k.indexOf(':') > 0 && k.indexOf('c:') !== 0) return o;
   o[k === 'custom' ? 'url' : (k === 'kick' || k === 'twitch' ? k : 'surl')] = $('wInput').value;
   return o;
 }
@@ -596,6 +649,7 @@ $('drag').addEventListener('mousedown', function (e) { if (e.button === 0) send(
 $('drag2').addEventListener('mousedown', function (e) { if (e.button === 0) send({ cmd: 'drag' }); });
 $('mdOv').onclick = function () { send({ cmd: 'mode', mode: 'overlay' }); };
 $('mdWin').onclick = function () { send({ cmd: 'mode', mode: 'window' }); };
+$('wsChat').onclick = function () { send({ cmd: 'wset', kind: this.getAttribute('data-k') }); };
 $('wkCustom').onclick = function () { send({ cmd: 'wset', kind: 'custom' }); };
 $('wkKick').onclick = function () { send({ cmd: 'wset', kind: 'kick' }); };
 $('wkTwitch').onclick = function () { send({ cmd: 'wset', kind: 'twitch' }); };

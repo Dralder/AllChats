@@ -10,7 +10,7 @@ mod update;
 
 use std::time::{Duration, Instant};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use serde_json::{json, Value};
@@ -34,6 +34,8 @@ const ICON_BYTES: &[u8] = include_bytes!("../allchats.ico");
 
 #[cfg(windows)]
 const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion,OptimizationHints,MediaRouter,Translate --enable-features=RemoveRedirectionBitmap --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --disable-smooth-scrolling --disable-background-networking --disable-breakpad --no-pings";
+
+static FAST_PROBE: AtomicU8 = AtomicU8::new(0);
 
 const SIZE_OVERLAY: (f64, f64) = (780.0, 475.0);
 
@@ -168,6 +170,16 @@ fn build_view(builder: WebViewBuilder<'_>, window: &Window) -> WebView {
 }
 
 #[cfg(windows)]
+fn try_child(builder: WebViewBuilder<'_>, window: &Window) -> Option<WebView> {
+    builder.build_as_child(window).ok()
+}
+
+#[cfg(not(windows))]
+fn try_child(builder: WebViewBuilder<'_>, window: &Window) -> Option<WebView> {
+    Some(build_view(builder, window))
+}
+
+#[cfg(windows)]
 fn build_child(builder: WebViewBuilder<'_>, window: &Window) -> WebView {
     builder.build_as_child(window).expect("webview")
 }
@@ -260,21 +272,58 @@ fn build_link(kind: &str, url: &str, kick: &str, twitch: &str) -> Option<String>
     }
 }
 
+const SUBS: [(&str, &str); 11] = [
+    ("kick:activity", "https://dashboard.kick.com/popout/%USER%/activity-feed"),
+    ("kick:actions", "https://dashboard.kick.com/popout/%USER%/channel-actions"),
+    ("kick:points", "https://dashboard.kick.com/community/chat/channel-points"),
+    ("kick:mods", "https://dashboard.kick.com/popout/%USER%/mod-actions"),
+    ("kick:rewards", "https://dashboard.kick.com/popout/%USER%/reward-request-queue"),
+    ("kick:session", "https://dashboard.kick.com/popout/%USER%/session-info"),
+    ("kick:stream", "https://dashboard.kick.com/popout/%USER%/stream-info"),
+    ("twitch:activity", "https://dashboard.twitch.tv/popout/u/%USER%/stream-manager/activity-feed"),
+    ("twitch:mods", "https://dashboard.twitch.tv/popout/u/%USER%/stream-manager/moderation-actions"),
+    ("twitch:health", "https://dashboard.twitch.tv/popout/u/%USER%/stream-manager/stream-health"),
+    ("twitch:info", "https://dashboard.twitch.tv/popout/u/%USER%/stream-manager/edit-stream-info"),
+];
+
+fn is_sub(kind: &str) -> bool {
+    SUBS.iter().any(|(k, _)| *k == kind)
+}
+
+fn sub_site(kind: &str) -> &'static str {
+    if kind.starts_with("kick:") {
+        "kick"
+    } else {
+        "twitch"
+    }
+}
+
 fn link_for(c: &WinCfg, kind: &str) -> Option<String> {
     if let Some(id) = kind.strip_prefix("c:") {
         let u = c.saved.iter().find(|s| s.id == id)?.url.trim().to_string();
         return if u.is_empty() { None } else { Some(norm(&u)) };
+    }
+    if let Some((_, tpl)) = SUBS.iter().find(|(k, _)| *k == kind) {
+        let user = if sub_site(kind) == "kick" { &c.kick_last } else { &c.twitch_last };
+        if user.is_empty() {
+            return None;
+        }
+        return Some(tpl.replace("%USER%", user));
     }
     build_link(kind, &c.url, &c.kick, &c.twitch)
 }
 
 fn kind_ok(c: &WinCfg, kind: &str) -> bool {
     matches!(kind, "custom" | "kick" | "twitch")
+        || is_sub(kind)
         || kind.strip_prefix("c:").map(|id| c.saved.iter().any(|s| s.id == id)).unwrap_or(false)
 }
 
 fn all_kinds(c: &WinCfg) -> Vec<String> {
     let mut v: Vec<String> = vec!["custom".into(), "kick".into(), "twitch".into()];
+    for (k, _) in SUBS.iter() {
+        v.push(k.to_string());
+    }
     for s in &c.saved {
         v.push(format!("c:{}", s.id));
     }
@@ -358,6 +407,9 @@ struct App {
     typeq: HashMap<String, (String, Vec<String>, Instant, Instant)>,
     win_ctx: WebContext,
     login: Option<Win>,
+    probe: Option<WebView>,
+    kick_on: bool,
+    tw_on: bool,
 }
 
 impl App {
@@ -454,6 +506,9 @@ impl App {
             typeq: HashMap::new(),
             win_ctx,
             login: None,
+            probe: None,
+            kick_on: false,
+            tw_on: false,
         }
     }
 
@@ -477,7 +532,7 @@ impl App {
         let script = scripts::window();
         let title = match kind.strip_prefix("c:") {
             Some(id) => self.wcfg.saved.iter().find(|s| s.id == id).map(|s| s.name.clone()).unwrap_or_default(),
-            None => lang::text(&map, &format!("w.win.{}", kind)),
+            None => lang::text(&map, &format!("w.win.{}", kind.replace(':', "."))),
         };
         let c = self.wcfg.clone();
         let g = win_geo(&c, kind);
@@ -492,7 +547,10 @@ impl App {
                 wb = wb.with_position(PhysicalPosition::new(x, y));
             }
         }
-        let window = wb.build(t).expect("window");
+        let window = match wb.build(t) {
+            Ok(w) => w,
+            Err(_) => return,
+        };
         let p1 = self.proxy.clone();
         let p2 = self.proxy.clone();
         let k1 = kind.to_string();
@@ -511,7 +569,10 @@ impl App {
             .with_on_page_load_handler(move |_ev: PageLoadEvent, url: String| {
                 let _ = p2.send_event(UserEvent::WinLoaded(k2.clone(), url));
             });
-        let view = build_child(tune(builder), &window);
+        let view = match try_child(tune(builder), &window) {
+            Some(v) => v,
+            None => return,
+        };
         let k3 = kind.to_string();
         let p3 = self.proxy.clone();
         let bar_html = BAR_HTML.replace("/*TITLE*/AllChats Window", &title.replace('<', "")).replace("/*SEVEN*/false", if self.seven_btn(kind) { "true" } else { "false" });
@@ -522,7 +583,10 @@ impl App {
                 let msg = format!("{{\"k\":\"{}\",\"t\":\"wbar\",\"b\":{}}}", k3, req.into_body());
                 let _ = p3.send_event(UserEvent::Web(msg));
             });
-        let bar = build_child(tune(bar_builder), &window);
+        let bar = match try_child(tune(bar_builder), &window) {
+            Some(v) => v,
+            None => return,
+        };
         let pane = Pane { view, bar, window, picker: None, picker_on: false };
         layout_pane(&pane);
         self.wins.insert(kind.to_string(), pane);
@@ -661,11 +725,12 @@ impl App {
             .map(|(k, _)| k.clone())
     }
 
-    fn reopen_wins(&mut self, t: &Target) {
+    fn reopen_wins(&mut self) {
         let kinds: Vec<String> = self.wins.keys().cloned().collect();
-        self.wins.clear();
         for k in kinds {
-            self.open_win(&k, t);
+            if let (Some(w), Some(l)) = (self.wins.get(&k), link_for(&self.wcfg, &k)) {
+                let _ = w.view.load_url(&l);
+            }
         }
     }
 
@@ -673,6 +738,13 @@ impl App {
         let url = match self.wcfg.kind.as_str() {
             "kick" => "https://kick.com/",
             "twitch" => "https://www.twitch.tv/login",
+            k if is_sub(k) => {
+                if sub_site(k) == "kick" {
+                    "https://kick.com/"
+                } else {
+                    "https://www.twitch.tv/login"
+                }
+            }
             _ => return,
         };
         if let Some(w) = &self.login {
@@ -693,6 +765,110 @@ impl App {
             .with_url(url);
         let view = build_view(tune(builder), &window);
         self.login = Some(Win { view, window });
+        FAST_PROBE.store(if url.contains("twitch") { 2 } else { 1 }, Ordering::Relaxed);
+    }
+
+    fn kprobe(&mut self, site: &str) {
+        if self.quitting {
+            return;
+        }
+        if self.mode != "window" {
+            self.probe = None;
+            return;
+        }
+        let url = if site == "twitch" { "https://www.twitch.tv/robots.txt" } else { "https://kick.com/robots.txt" };
+        if let Some(p) = &self.probe {
+            let _ = p.load_url(url);
+            return;
+        }
+        let px = self.proxy.clone();
+        let builder = WebViewBuilder::with_web_context(&mut self.win_ctx)
+            .with_background_color((32, 32, 32, 255))
+            .with_url(url)
+            .with_initialization_script(scripts::kick_probe())
+            .with_ipc_handler(move |req: Request<String>| {
+                let body = req.into_body();
+                if body.starts_with("{\"t\":\"kuser\"") || body.starts_with("{\"t\":\"tuser\"") {
+                    let _ = px.send_event(UserEvent::Web(body));
+                }
+            });
+        if let Some(view) = try_child(tune(builder), &self.ctl.window) {
+            let _ = view.set_bounds(wry::Rect {
+                position: wry::dpi::PhysicalPosition::new(-4, -4).into(),
+                size: wry::dpi::PhysicalSize::new(1, 1).into(),
+            });
+            self.probe = Some(view);
+        }
+    }
+
+    fn kprobe_all(&mut self) {
+        self.kprobe("kick");
+        let px = self.proxy.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(5));
+            let _ = px.send_event(UserEvent::Ui("{\"cmd\":\"kprobe\",\"s\":\"twitch\"}".to_string()));
+        });
+    }
+
+    fn sub_on(&self, kind: &str) -> bool {
+        if sub_site(kind) == "kick" {
+            self.kick_on
+        } else {
+            self.tw_on
+        }
+    }
+
+    fn set_login(&mut self, site: &str, user: Option<String>) {
+        let kick = site == "kick";
+        let kinds = all_kinds(&self.wcfg);
+        let before: Vec<Option<String>> = kinds.iter().map(|k| link_for(&self.wcfg, k)).collect();
+        let was_on = if kick { self.kick_on } else { self.tw_on };
+        let was_user = if kick { self.wcfg.kick_last.clone() } else { self.wcfg.twitch_last.clone() };
+        let on = user.is_some();
+        if kick {
+            self.kick_on = on;
+        } else {
+            self.tw_on = on;
+        }
+        match user {
+            Some(n) => {
+                if !n.is_empty() {
+                    if kick {
+                        self.wcfg.kick_last = n;
+                    } else {
+                        self.wcfg.twitch_last = n;
+                    }
+                }
+            }
+            None => {
+                if is_sub(&self.wcfg.kind) && sub_site(&self.wcfg.kind) == site {
+                    self.wcfg.kind = site.to_string();
+                }
+                if was_on {
+                    let subs: Vec<String> = self.wins.keys().filter(|k| is_sub(k) && sub_site(k) == site).cloned().collect();
+                    for k in subs {
+                        self.wins.remove(&k);
+                        self.win_url.remove(&k);
+                    }
+                }
+            }
+        }
+        for (i, k) in kinds.iter().enumerate() {
+            let after = link_for(&self.wcfg, k);
+            if after != before[i] {
+                if let (Some(w), Some(l)) = (self.wins.get(k.as_str()), &after) {
+                    let _ = w.view.load_url(l);
+                }
+            }
+        }
+        if !was_on && on {
+            let _ = self.proxy.send_event(UserEvent::Ui("{\"cmd\":\"kopen\"}".to_string()));
+        }
+        let now_user = if kick { self.wcfg.kick_last.clone() } else { self.wcfg.twitch_last.clone() };
+        if was_on != on || was_user != now_user {
+            self.save_settings();
+            self.push();
+        }
     }
 
     fn boot(&mut self, t: &Target) {
@@ -701,6 +877,7 @@ impl App {
         }
         self.booted = true;
         self.start_mode(t);
+        self.kprobe_all();
         self.push();
     }
 
@@ -710,7 +887,7 @@ impl App {
         }
         let saved = self.wcfg.open.clone();
         for k in saved {
-            if kind_ok(&self.wcfg, &k) {
+            if kind_ok(&self.wcfg, &k) && !is_sub(&k) {
                 self.open_win(&k, t);
             }
         }
@@ -816,6 +993,9 @@ impl App {
                 "zoom": win_opt(&self.wcfg, &self.wcfg.kind).zoom,
                 "running": self.wins.contains_key(&self.wcfg.kind),
                 "saved": self.wcfg.saved.iter().map(|s| json!({ "id": s.id, "name": s.name, "url": s.url, "running": self.wins.contains_key(&format!("c:{}", s.id)) })).collect::<Vec<_>>(),
+                "kick_on": self.kick_on,
+                "tw_on": self.tw_on,
+                "runs": self.wins.keys().collect::<Vec<_>>(),
                 "link": win_link(&self.wcfg).unwrap_or_default()
             }
         })
@@ -1495,10 +1675,12 @@ impl App {
                         self.cands.clear();
                     } else {
                         self.login = None;
+                        FAST_PROBE.store(0, Ordering::Relaxed);
                     }
                     self.mode = m.to_string();
                     self.ctl.window.set_inner_size(ctl_size(&self.mode));
                     self.save_settings();
+                    self.kprobe_all();
                 }
             }
             "wset" => {
@@ -1578,6 +1760,30 @@ impl App {
                     self.save_settings();
                 }
             }
+            "kopen" => {
+                if self.mode == "window" && (self.kick_on || self.tw_on) {
+                    let n = v["n"].as_u64().unwrap_or(0);
+                    let pending = self.wcfg.open.iter().find(|k| is_sub(k) && self.sub_on(k) && !self.wins.contains_key(k.as_str())).cloned();
+                    if let Some(k) = pending {
+                        self.open_win(&k, t);
+                        let more = self.wcfg.open.iter().any(|k| is_sub(k) && self.sub_on(k) && !self.wins.contains_key(k.as_str()));
+                        if more && n < 8 {
+                            let px = self.proxy.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(Duration::from_millis(700));
+                                let _ = px.send_event(UserEvent::Ui(format!("{{\"cmd\":\"kopen\",\"n\":{}}}", n + 1)));
+                            });
+                        }
+                    }
+                }
+            }
+            "kprobe" => {
+                let site = v["s"].as_str().unwrap_or("kick").to_string();
+                self.kprobe(&site);
+            }
+            "kprobeall" => {
+                self.kprobe_all();
+            }
             "wdel" => {
                 let k = self.wcfg.kind.clone();
                 if let Some(id) = k.strip_prefix("c:") {
@@ -1593,8 +1799,8 @@ impl App {
                 }
             }
             "wstart" => {
-                if self.mode == "window" {
-                    let k = self.wcfg.kind.clone();
+                let k = self.wcfg.kind.clone();
+                if self.mode == "window" && (!is_sub(&k) || self.sub_on(&k)) {
                     self.open_win(&k, t);
                 }
             }
@@ -1611,7 +1817,7 @@ impl App {
             }
             "wreopen" => {
                 if !self.wins.is_empty() {
-                    self.reopen_wins(t);
+                    self.reopen_wins();
                 }
             }
             "cancel_update" => {
@@ -1644,6 +1850,24 @@ impl App {
                 self.cands = serde_json::from_value(v["list"].clone()).unwrap_or_default();
                 self.push();
             }
+            "tuser" => match v["s"].as_str().unwrap_or("") {
+                "in" => {
+                    let n = clean_user(v["u"].as_str().unwrap_or("")).to_lowercase();
+                    self.set_login("twitch", Some(n));
+                }
+                "out" => self.set_login("twitch", None),
+                _ => {}
+            },
+            "kuser" => match v["s"].as_str().unwrap_or("") {
+                "in" => {
+                    let n = clean_user(v["u"].as_str().unwrap_or("")).to_lowercase();
+                    if !n.is_empty() {
+                        self.set_login("kick", Some(n));
+                    }
+                }
+                "out" => self.set_login("kick", None),
+                _ => {}
+            },
             "7tv_id" => self.seven_id(&v),
             "7tv_img" => {
                 let target = v["k"].as_str().unwrap_or("overlay").to_string();
@@ -1877,9 +2101,11 @@ impl App {
         if self.login.as_ref().map(|w| w.window.id()) == Some(id) {
             if let WindowEvent::CloseRequested = ev {
                 self.login = None;
+                FAST_PROBE.store(0, Ordering::Relaxed);
                 if !self.wins.is_empty() {
                     let _ = self.proxy.send_event(UserEvent::Ui("{\"cmd\":\"wreopen\"}".to_string()));
                 }
+                let _ = self.proxy.send_event(UserEvent::Ui("{\"cmd\":\"kprobeall\"}".to_string()));
             }
             return false;
         }
@@ -1986,9 +2212,41 @@ fn main() {
     let mut app = App::new(&event_loop, proxy.clone());
     {
         let px = proxy.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(4));
+            let site = match FAST_PROBE.load(Ordering::Relaxed) {
+                1 => "kick",
+                2 => "twitch",
+                _ => continue,
+            };
+            let msg = format!("{{\"cmd\":\"kprobe\",\"s\":\"{}\"}}", site);
+            if px.send_event(UserEvent::Ui(msg)).is_err() {
+                break;
+            }
+        });
+    }
+
+    {
+        let px = proxy.clone();
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(4000));
             let _ = px.send_event(UserEvent::Ui("{\"cmd\":\"boot\"}".to_string()));
+        });
+    }
+
+    {
+        let px = proxy.clone();
+        std::thread::spawn(move || {
+            let mut n: u32 = 0;
+            loop {
+                std::thread::sleep(Duration::from_secs(30));
+                n += 1;
+                let site = if n % 2 == 0 { "kick" } else { "twitch" };
+                let msg = format!("{{\"cmd\":\"kprobe\",\"s\":\"{}\"}}", site);
+                if px.send_event(UserEvent::Ui(msg)).is_err() {
+                    break;
+                }
+            }
         });
     }
 

@@ -166,6 +166,8 @@ pub struct WinCfg {
     pub open: Vec<String>,
     pub opts: std::collections::HashMap<String, Opt>,
     pub saved: Vec<Saved>,
+    pub kick_last: String,
+    pub twitch_last: String,
 }
 
 impl Default for WinCfg {
@@ -185,6 +187,8 @@ impl Default for WinCfg {
             open: Vec::new(),
             opts: std::collections::HashMap::new(),
             saved: Vec::new(),
+            kick_last: String::new(),
+            twitch_last: String::new(),
         }
     }
 }
@@ -277,6 +281,8 @@ fn parse_settings(text: &str) -> Option<Settings> {
         pick(w, "url", &mut c.url);
         pick(w, "kick", &mut c.kick);
         pick(w, "twitch", &mut c.twitch);
+        pick(w, "kick_last", &mut c.kick_last);
+        pick(w, "twitch_last", &mut c.twitch_last);
         pick(w, "topmost", &mut c.topmost);
         pick(w, "seven", &mut c.seven);
         pick(w, "x", &mut c.x);
