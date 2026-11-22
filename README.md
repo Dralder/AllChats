@@ -23,6 +23,7 @@ AllChats opens a chat page (Kick, Twitch, YouTube or any web page) as a transpar
 - Hide border mode
 - Custom, Kick and Twitch buttons: type just a username or a full link
 - Window mode: separate Custom, Kick and Twitch windows that can run at the same time
+- Stream management sub buttons for Kick and Twitch (Session Info, Activity Feed, Mod Actions and more), available after login
 - Save your own custom windows with their own URL and settings, as many as you want
 - 7TV emotes on Kick, Twitch and YouTube
 - 7TV emote menu in window mode for supported websites
@@ -48,7 +49,7 @@ AllChats opens a chat page (Kick, Twitch, YouTube or any web page) as a transpar
 2. Pick Custom, Kick or Twitch and enter the URL or username.
 3. Click Start. Each type opens its own window, and you can run all three together.
 4. To save your own window, select Custom, enter a URL, click Add and give it a name. It appears as a new button with its own settings. Select it to change its URL, or click Remove to delete it.
-
+5. For Kick and Twitch, Click Login and sign in, and the stream management buttons appear under it (Kick: Activity Feed, Channel Actions, Channel Points, Mod Actions, Reward Requests, Session Info, Stream Info. Twitch: Activity Feed, Mod Actions, Stream Health, Stream Info).
 ## Requirements
 
 - Windows 10 or 11
@@ -84,6 +85,7 @@ Made by Dralder.  [KICK](https://kick.com/dralder)  [Telegram](https://t.me/dral
 - حالت پنهان کردن حاشیه
 - دکمه‌های Custom، Kick و Twitch: فقط نام کاربری یا لینک کامل را وارد کنید
 - حالت پنجره: پنجره‌های جداگانه Custom، Kick و Twitch که همزمان کار می‌کنند
+- دکمه‌های مدیریت استریم برای Kick و Twitch (اطلاعات نشست، فعالیت‌ها، اقدامات مدیران و بیشتر) بعد از ورود به حساب
 - پنجره‌های دلخواه خودتان را با آدرس و تنظیمات جداگانه ذخیره کنید، به هر تعداد که می‌خواهید
 - ایموت‌های 7TV در Kick، Twitch و YouTube
 - منوی ایموت 7TV در حالت پنجره برای وبسایت های پشتیبانی شده
@@ -109,7 +111,7 @@ Made by Dralder.  [KICK](https://kick.com/dralder)  [Telegram](https://t.me/dral
 2. Custom، Kick یا Twitch را انتخاب کنید و آدرس یا نام کاربری را وارد کنید.
 3. روی Start کلیک کنید. هر نوع پنجره جداگانه باز می‌شود و می‌توانید هر سه را همزمان اجرا کنید.
 4. برای ذخیره پنجره دلخواه، Custom را انتخاب کنید، آدرس را وارد کنید، روی Add بزنید و یک نام بدهید. به‌صورت یک دکمه جدید با تنظیمات جداگانه اضافه می‌شود. آن را انتخاب کنید تا آدرسش را تغییر دهید، یا روی Remove بزنید تا حذف شود.
-
+5. برای Kick و Twitch، روی Login بزنید و وارد شوید تا دکمه‌های مدیریت استریم زیر آن ظاهر شوند (Kick: Activity Feed، Channel Actions، Channel Points، Mod Actions، Reward Requests، Session Info، Stream Info. Twitch: Activity Feed، Mod Actions، Stream Health، Stream Info).
 ## نیازمندی‌ها
 
 - ویندوز ۱۰ یا ۱۱
